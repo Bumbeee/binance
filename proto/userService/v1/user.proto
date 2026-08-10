@@ -1,0 +1,80 @@
+syntax = "proto3";
+package userservice.v1;
+
+option go_package = "userService/v1;user";
+
+import "google/protobuf/timestamp.proto";
+
+service UserService {
+  rpc Register (RegisterRequest) returns (RegisterResponse) {}
+  rpc Login (LoginRequest) returns (LoginResponse) {}
+  rpc Logout (LogoutRequest) returns (LogoutResponse) {}
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse) {} // валидация токена в grpc interceptor
+  rpc GetProfile (GetProfileRequest) returns (GetProfileResponse) {}
+  rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse) {}
+}
+
+
+enum Role { // TODO mock
+  ROLE_UNSPECIFIED = 0;
+  ROLE_USER = 1;
+  ROLE_ADMIN = 2;
+  ROLE_PREMIUM = 3;
+}
+message AuthToken {
+  string access_token = 1;
+  string refresh_token = 2;
+  google.protobuf.Timestamp expires_at = 3; // expired - use Timestamp
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  string user_id = 1;
+  AuthToken auth_token = 2;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string user_id = 1;
+  AuthToken auth_token = 2;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message LogoutResponse {}
+
+message GetProfileRequest {}
+
+message GetProfileResponse {
+  string user_id = 1;
+  string email = 2;
+  Role role = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  AuthToken auth_token = 1;
+}
+
+message ValidateTokenRequest { // валидация токена в grpc interceptor
+  string access_token = 1;
+}
+
+message ValidateTokenResponse { // валидация токена в grpc interceptor
+  bool valid = 1;
+  string user_id = 2;
+}
