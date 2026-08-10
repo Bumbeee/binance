@@ -48,7 +48,7 @@ func toRefreshTokenResponse(r *token.RefreshTokenResult) *user.RefreshTokenRespo
 	}
 }
 
-func toGetProfileResponse(r profile.GetProfileResult) *user.GetProfileResponse {
+func toGetProfileResponse(r *profile.GetProfileResult) *user.GetProfileResponse {
 	return &user.GetProfileResponse{
 		UserId:    r.UserID,
 		Email:     r.Email,

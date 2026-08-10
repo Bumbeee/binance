@@ -22,12 +22,12 @@ type GetProfileResult struct {
 	CreatedAt time.Time
 }
 
-func (uc *GetProfileCase) Execute(ctx context.Context, userID string) (GetProfileResult, error) {
+func (uc *GetProfileCase) Execute(ctx context.Context, userID string) (*GetProfileResult, error) {
 	u, err := uc.repo.FindByID(ctx, userID)
 	if err != nil {
-		return GetProfileResult{}, err
+		return nil, err
 	}
-	return GetProfileResult{
+	return &GetProfileResult{
 		UserID:    u.ID.String(),
 		Email:     u.Email,
 		Role:      string(u.Role),
