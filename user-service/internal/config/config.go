@@ -2,6 +2,7 @@ package config
 
 import (
 	"time"
+	"userservice/shared/infra/logger"
 	"userservice/shared/validator"
 
 	"github.com/joho/godotenv"
@@ -27,6 +28,8 @@ type Config struct {
 	PasswordConfig validator.PasswordRequirements
 
 	GRPCAddr string
+
+	LogConfig logger.LoggerStruct
 }
 
 func Load() *Config {
@@ -41,6 +44,7 @@ func Load() *Config {
 		PGMinConns:        pgMinConns,
 		PGMaxConns:        pgMaxConns,
 		PGConnMaxIdleTime: getPGConnMaxIdleTime(),
+		// TODO: add life time
 
 		RedisAddr: getRedisAddr(),
 
@@ -54,5 +58,7 @@ func Load() *Config {
 		PasswordConfig: getPasswordConfig(),
 
 		GRPCAddr: getGRPCAddr(),
+
+		LogConfig: getLogConfig(),
 	}
 }

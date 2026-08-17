@@ -15,12 +15,14 @@ import (
 
 type Server struct {
 	user.UnimplementedUserServiceServer
-	register      *auth.RegisterCase
-	login         *auth.LoginCase
-	logout        *auth.LogoutCase
-	validateToken *token.ValidateTokenCase
-	refreshToken  *token.RefreshTokenCase
-	getProfile    *profile.GetProfileCase
+	register       *auth.RegisterCase
+	login          *auth.LoginCase
+	logout         *auth.LogoutCase
+	validateToken  *token.ValidateTokenCase
+	refreshToken   *token.RefreshTokenCase
+	getProfile     *profile.GetProfileCase
+	getUserProfile *profile.GetUserProfileCase
+	changePassword *auth.ChangePasswordCase
 }
 
 func NewServer(
@@ -30,14 +32,18 @@ func NewServer(
 	validateToken *token.ValidateTokenCase,
 	refreshToken *token.RefreshTokenCase,
 	getProfile *profile.GetProfileCase,
+	getUserProfile *profile.GetUserProfileCase,
+	changePassword *auth.ChangePasswordCase,
 ) *Server {
 	return &Server{
-		register:      register,
-		login:         login,
-		logout:        logout,
-		validateToken: validateToken,
-		refreshToken:  refreshToken,
-		getProfile:    getProfile,
+		register:       register,
+		login:          login,
+		logout:         logout,
+		validateToken:  validateToken,
+		refreshToken:   refreshToken,
+		getProfile:     getProfile,
+		getUserProfile: getUserProfile,
+		changePassword: changePassword,
 	}
 }
 
@@ -89,4 +95,24 @@ func (s *Server) GetProfile(ctx context.Context, req *user.GetProfileRequest) (*
 	}
 
 	return toGetProfileResponse(res), nil
+}
+
+func (s *Server) GetUserProfile(ctx context.Context, req *user.GetUserProfileRequest) (*user.GetUserProfileResponse, error) {
+	res, err := s.getUserProfile.Execute(ctx, req.UserId)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return toGetUserProfileResponse(res), nil
+}
+
+func (s *Server) ChangePassword(ctx context.Context, req *user.ChangePasswordRequest) (*user.ChangePasswordResponse, error) {
+	userID, ok := interceptor.UserIDFromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Internal, "user id not found in context")
+	}
+
+	if err := s.changePassword.Execute(ctx, userID, req.OldPassword, req.NewPassword); err != nil {
+		return nil, toGRPCError(err)
+	}
+	return &user.ChangePasswordResponse{}, nil
 }

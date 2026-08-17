@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"userservice/shared/infra/logger"
 	"userservice/shared/validator"
 )
 
@@ -154,4 +155,20 @@ func getPasswordConfig() validator.PasswordRequirements {
 
 func getGRPCAddr() string {
 	return getEnvString("GRPC_ADDR", ":50051")
+}
+
+// --- Logger ---
+
+func getLogConfig() logger.LoggerStruct {
+	return logger.LoggerStruct{
+		Level:             getEnvString("LOG_LEVEL", "info"),
+		Encoding:          getEnvString("LOG_ENCODING", "json"),
+		DisableCaller:     getEnvBool("LOG_DISABLE_CALLER", false),
+		DisableStacktrace: getEnvBool("LOG_DISABLE_STACKTRACE", false),
+
+		FilePath:       getEnvString("LOG_FILE_PATH", "logs/user-service.log"),
+		FileMaxSizeMB:  getEnvInt("LOG_FILE_MAX_SIZE_MB", 100),
+		FileMaxBackups: getEnvInt("LOG_FILE_MAX_BACKUPS", 5),
+		FileMaxAgeDays: getEnvInt("LOG_FILE_MAX_AGE_DAYS", 30),
+	}
 }

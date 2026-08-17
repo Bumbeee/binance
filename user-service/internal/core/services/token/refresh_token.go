@@ -10,13 +10,20 @@ import (
 type RefreshTokenCase struct {
 	store      ports.RefreshTokenStore
 	token      ports.TokenIssuer
+	repo       ports.UserRepositiry
 	refreshTTL time.Duration
 }
 
-func NewRefreshTokenCase(store ports.RefreshTokenStore, tokenIssuer ports.TokenIssuer, refreshTTL time.Duration) *RefreshTokenCase {
+func NewRefreshTokenCase(
+	store ports.RefreshTokenStore,
+	tokenIssuer ports.TokenIssuer,
+	repo ports.UserRepositiry,
+	refreshTTL time.Duration,
+) *RefreshTokenCase {
 	return &RefreshTokenCase{
 		store:      store,
 		token:      tokenIssuer,
+		repo:       repo,
 		refreshTTL: refreshTTL,
 	}
 }
@@ -36,7 +43,16 @@ func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) 
 		return nil, err
 	}
 
-	newAccessToken, expiresAt, err := r.token.Issue(userID)
+	if err := r.store.Delete(ctx, oldRefreshToken); err != nil {
+		return nil, err
+	}
+
+	user, err := r.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	newAccessToken, expiresAt, err := r.token.Issue(userID, user.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -47,10 +63,6 @@ func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) 
 	}
 
 	if err := r.store.Save(ctx, newRefreshToken, userID, r.refreshTTL); err != nil {
-		return nil, err
-	}
-
-	if err := r.store.Delete(ctx, oldRefreshToken); err != nil {
 		return nil, err
 	}
 

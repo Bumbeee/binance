@@ -2,6 +2,7 @@ package domain
 
 import (
 	"time"
+	"userservice/shared/validator"
 
 	"github.com/google/uuid"
 )
@@ -17,7 +18,7 @@ type User struct {
 func NewUser(rawEmail string, passwordHash string) (*User, error) {
 	return &User{
 		ID:           uuid.New(),
-		Email:        rawEmail,
+		Email:        validator.NormalizeEmail(rawEmail),
 		PasswordHash: passwordHash,
 		Role:         RoleUser,
 		CreatedAt:    time.Now(),

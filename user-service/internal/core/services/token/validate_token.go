@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"userservice/internal/core/domain"
 	"userservice/internal/core/ports"
 )
 
@@ -16,12 +17,13 @@ func NewValidateTokenCase(tokens ports.TokenIssuer) *ValidateTokenCase {
 type ValidateTokenResult struct {
 	Valid  bool
 	UserID string
+	Role   domain.Role
 }
 
 func (uc *ValidateTokenCase) Execute(ctx context.Context, accessToken string) *ValidateTokenResult {
-	userID, err := uc.tokens.Parse(accessToken)
+	userID, role, err := uc.tokens.Parse(accessToken)
 	if err != nil {
 		return &ValidateTokenResult{Valid: false}
 	}
-	return &ValidateTokenResult{Valid: true, UserID: userID}
+	return &ValidateTokenResult{Valid: true, UserID: userID, Role: role}
 }

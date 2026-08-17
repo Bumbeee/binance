@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"log"
 	"time"
 	"userservice/internal/core/ports"
 	"userservice/internal/core/services/token"
@@ -48,7 +47,6 @@ type LoginResult struct {
 }
 
 func (lc *LoginCase) Execute(ctx context.Context, email, plainPassword string) (*LoginResult, error) {
-	log.Println("EXECUTE ENTERED")
 	if !validator.IsValidEmail(email) || plainPassword == "" {
 		return nil, ErrInvalidCredentials
 	}
@@ -63,7 +61,7 @@ func (lc *LoginCase) Execute(ctx context.Context, email, plainPassword string) (
 		return nil, ErrInvalidCredentials
 	}
 
-	accessToken, expiresAt, err := lc.tokens.Issue(user.ID.String())
+	accessToken, expiresAt, err := lc.tokens.Issue(user.ID.String(), user.Role)
 	if err != nil {
 		return nil, err
 	}

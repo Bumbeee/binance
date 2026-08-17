@@ -2,13 +2,13 @@ package app
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -23,24 +23,28 @@ import (
 	"userservice/internal/core/services/auth"
 	"userservice/internal/core/services/profile"
 	"userservice/internal/core/services/token"
+	"userservice/shared/infra/logger"
 	"userservice/shared/infra/pool"
 	"userservice/shared/infra/redis"
 )
 
 const shutdownTimeout = 10 * time.Second
 
-func BuildApp() { // move inmemory to postgress + redis + goose migration
+func BuildApp() {
 	cfg := config.Load()
+
+	log := logger.New(cfg.LogConfig)
+	defer log.Sync()
 
 	ctx := context.Background()
 	dbpool, err := pool.NewPool(ctx, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime)
 	if err != nil {
-		log.Fatalf("failed to connect to postgres: %v", err)
+		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}
 
 	redisClient := redis.NewRedisClient(cfg.RedisAddr)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatalf("failed to connect to redis: %v", err)
+		log.Fatal("failed to connect to redis", zap.Error(err))
 	}
 
 	passwordRequirements := cfg.PasswordConfig
@@ -53,12 +57,14 @@ func BuildApp() { // move inmemory to postgress + redis + goose migration
 	registerCase := auth.NewRegisterCase(repo, hasher, tokens, refreshTokenStore, cfg.RefreshTokenTTL, passwordRequirements)
 	loginCase, err := auth.NewLoginCase(repo, hasher, tokens, refreshTokenStore, cfg.RefreshTokenTTL)
 	if err != nil {
-		log.Fatalf("failed to init login case: %v", err)
+		log.Fatal("failed to init login case", zap.Error(err))
 	}
 	validateTokenCase := token.NewValidateTokenCase(tokens)
 	logoutCase := auth.NewLogoutCase(refreshTokenStore)
-	refreshTokenCase := token.NewRefreshTokenCase(refreshTokenStore, tokens, cfg.RefreshTokenTTL)
+	refreshTokenCase := token.NewRefreshTokenCase(refreshTokenStore, tokens, repo, cfg.RefreshTokenTTL)
 	getProfileCase := profile.NewGetProfileCase(repo)
+	getUserProfileCase := profile.NewGetUserProfileCase(repo)
+	changePasswordCase := auth.NewChangePasswordCase(repo, hasher, passwordRequirements)
 
 	authInterceptor := interceptor.NewAuthInterceptor(validateTokenCase)
 
@@ -75,18 +81,20 @@ func BuildApp() { // move inmemory to postgress + redis + goose migration
 		validateTokenCase,
 		refreshTokenCase,
 		getProfileCase,
+		getUserProfileCase,
+		changePasswordCase,
 	)
 
 	user.RegisterUserServiceServer(grpcServer, userServer)
 
 	lis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatal("failed to listen", zap.Error(err))
 	}
 
 	serveErrCh := make(chan error, 1)
 	go func() {
-		log.Printf("UserService listening on %s", cfg.GRPCAddr)
+		log.Info("UserService listening", zap.String("addr", cfg.GRPCAddr))
 		serveErrCh <- grpcServer.Serve(lis)
 	}()
 
@@ -95,10 +103,10 @@ func BuildApp() { // move inmemory to postgress + redis + goose migration
 
 	select {
 	case sig := <-quit:
-		log.Printf("received signal %s, shutting down...", sig)
+		log.Info("received signal, shutting down", zap.String("signal", sig.String()))
 	case err := <-serveErrCh:
 		if err != nil {
-			log.Printf("grpc server stopped unexpectedly: %v", err)
+			log.Error("grpc server stopped unexpectedly", zap.Error(err))
 		}
 	}
 
@@ -110,20 +118,20 @@ func BuildApp() { // move inmemory to postgress + redis + goose migration
 
 	select {
 	case <-stopped:
-		log.Println("grpc server stopped gracefully")
+		log.Info("grpc server stopped gracefully")
 	case <-time.After(shutdownTimeout):
-		log.Println("graceful shutdown timed out, forcing stop")
+		log.Warn("graceful shutdown timed out, forcing stop")
 		grpcServer.Stop()
 	}
 
 	dbpool.Close()
-	log.Println("postgres pool closed")
+	log.Info("postgres pool closed")
 
 	if err := redisClient.Close(); err != nil {
-		log.Printf("failed to close redis client: %v", err)
+		log.Error("failed to close redis client", zap.Error(err))
 	} else {
-		log.Println("redis client closed")
+		log.Info("redis client closed")
 	}
 
-	log.Println("shutdown complete")
+	log.Info("shutdown complete")
 }

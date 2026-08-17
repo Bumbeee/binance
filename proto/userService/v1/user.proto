@@ -9,22 +9,24 @@ service UserService {
   rpc Register (RegisterRequest) returns (RegisterResponse) {}
   rpc Login (LoginRequest) returns (LoginResponse) {}
   rpc Logout (LogoutRequest) returns (LogoutResponse) {}
-  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse) {} // валидация токена в grpc interceptor
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse) {}
   rpc GetProfile (GetProfileRequest) returns (GetProfileResponse) {}
+  rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse) {}
+  rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse) {}
   rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse) {}
 }
 
-
-enum Role { // TODO mock
+enum Role {
   ROLE_UNSPECIFIED = 0;
   ROLE_USER = 1;
   ROLE_ADMIN = 2;
   ROLE_PREMIUM = 3;
 }
+
 message AuthToken {
   string access_token = 1;
   string refresh_token = 2;
-  google.protobuf.Timestamp expires_at = 3; // expired - use Timestamp
+  google.protobuf.Timestamp expires_at = 3;
 }
 
 message RegisterRequest {
@@ -62,6 +64,24 @@ message GetProfileResponse {
   google.protobuf.Timestamp created_at = 4;
 }
 
+message GetUserProfileRequest {
+  string user_id = 1;
+}
+
+message GetUserProfileResponse {
+  string user_id = 1;
+  string email = 2;
+  Role role = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
 message RefreshTokenRequest {
   string refresh_token = 1;
 }
@@ -70,11 +90,12 @@ message RefreshTokenResponse {
   AuthToken auth_token = 1;
 }
 
-message ValidateTokenRequest { // валидация токена в grpc interceptor
+message ValidateTokenRequest {
   string access_token = 1;
 }
 
-message ValidateTokenResponse { // валидация токена в grpc interceptor
+message ValidateTokenResponse {
   bool valid = 1;
   string user_id = 2;
+  Role role = 3;
 }

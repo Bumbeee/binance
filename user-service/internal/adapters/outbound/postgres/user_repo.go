@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"userservice/internal/core/domain"
@@ -37,6 +38,10 @@ func (repo *pgxRepository) Save(ctx context.Context, user *domain.User) error {
 		user.CreatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return domain.ErrUserAlreadyExists
+		}
 		return fmt.Errorf("user_repo.Save: %w", err)
 	}
 
@@ -112,4 +117,17 @@ func rowToUser(id, email, passwordHash, role string, createdAt time.Time) (*doma
 		Role:         domain.Role(role),
 		CreatedAt:    createdAt,
 	}, nil
+}
+
+func (repo *pgxRepository) UpdatePasswordHash(ctx context.Context, userID, newPasswordHash string) error {
+	query := `UPDATE users SET password_hash = $1 WHERE id = $2`
+
+	tag, err := repo.pool.Exec(ctx, query, newPasswordHash, userID)
+	if err != nil {
+		return fmt.Errorf("user_repo.UpdatePasswordHash: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
 }

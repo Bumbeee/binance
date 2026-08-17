@@ -56,11 +56,13 @@ func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword string)
 		return nil, err
 	}
 
+	// TODO: check email for unique
+
 	if err := r.repo.Save(ctx, user); err != nil {
 		return nil, err
 	}
 
-	accessToken, expiresAt, err := r.tokens.Issue(user.ID.String())
+	accessToken, expiresAt, err := r.tokens.Issue(user.ID.String(), user.Role)
 	if err != nil {
 		return nil, err
 	}
