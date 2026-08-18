@@ -66,10 +66,14 @@ func BuildApp() {
 	getUserProfileCase := profile.NewGetUserProfileCase(repo)
 	changePasswordCase := auth.NewChangePasswordCase(repo, hasher, passwordRequirements)
 
+	loggingInterceptor := interceptor.NewLoggingInterceptor(log)
 	authInterceptor := interceptor.NewAuthInterceptor(validateTokenCase)
 
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(authInterceptor.Unary()),
+		grpc.ChainUnaryInterceptor(
+			loggingInterceptor.Unary(),
+			authInterceptor.Unary(),
+		),
 	)
 
 	reflection.Register(grpcServer)
