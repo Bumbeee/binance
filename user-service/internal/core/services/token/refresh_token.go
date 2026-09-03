@@ -10,14 +10,14 @@ import (
 type RefreshTokenCase struct {
 	store      ports.RefreshTokenStore
 	token      ports.TokenIssuer
-	repo       ports.UserRepositiry
+	repo       ports.UserRepository
 	refreshTTL time.Duration
 }
 
 func NewRefreshTokenCase(
 	store ports.RefreshTokenStore,
 	tokenIssuer ports.TokenIssuer,
-	repo ports.UserRepositiry,
+	repo ports.UserRepository,
 	refreshTTL time.Duration,
 ) *RefreshTokenCase {
 	return &RefreshTokenCase{

@@ -41,7 +41,7 @@ func (i *Issuer) Parse(tokenString string) (userID string, role domain.Role, err
 
 	t, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, ErrWrongSighMethod
+			return nil, ErrWrongSignMethod
 		}
 		return i.secret, nil
 	})

@@ -20,22 +20,18 @@ type pgxRepository struct {
 	pool *pgxpool.Pool
 }
 
-func NewUserRepository(pool *pgxpool.Pool) ports.UserRepositiry {
+func NewUserRepository(pool *pgxpool.Pool) ports.UserRepository {
 	return &pgxRepository{pool: pool}
 }
 
 func (repo *pgxRepository) Save(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, role, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`
-
+	INSERT INTO users (id, email, password_hash, role, created_at, first_name, last_name)
+	VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
 	_, err := repo.pool.Exec(ctx, query,
-		user.ID,
-		user.Email,
-		user.PasswordHash,
-		string(user.Role),
-		user.CreatedAt,
+		user.ID, user.Email, user.PasswordHash, string(user.Role), user.CreatedAt,
+		user.FirstName, user.LastName,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -105,7 +101,7 @@ func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.Use
 }
 
 func rowToUser(id, email, passwordHash, role string, createdAt time.Time) (*domain.User, error) {
-	parsedID, err := uuid.Parse(id)
+	parsedID, err := uuid.Parse(id) // TODO: check if needed to parse string to UUID
 	if err != nil {
 		return nil, fmt.Errorf("user_repo: invalid user id in db: %w", err)
 	}
@@ -128,6 +124,20 @@ func (repo *pgxRepository) UpdatePasswordHash(ctx context.Context, userID, newPa
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+func (repo *pgxRepository) UpdateProfile(ctx context.Context, userID string, firstName, lastName *string) error {
+	if firstName != nil {
+		if _, err := repo.pool.Exec(ctx, `UPDATE users SET first_name = $1 WHERE id = $2`, *firstName, userID); err != nil {
+			return fmt.Errorf("user_repo.UpdateProfile: %w", err)
+		}
+	}
+	if lastName != nil {
+		if _, err := repo.pool.Exec(ctx, `UPDATE users SET last_name = $1 WHERE id = $2`, *lastName, userID); err != nil {
+			return fmt.Errorf("user_repo.UpdateProfile: %w", err)
+		}
 	}
 	return nil
 }

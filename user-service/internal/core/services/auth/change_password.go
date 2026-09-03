@@ -10,13 +10,13 @@ import (
 )
 
 type ChangePasswordCase struct {
-	repo                 ports.UserRepositiry
+	repo                 ports.UserRepository
 	hasher               ports.PasswordHasher
 	passwordRequirements validator.PasswordRequirements
 }
 
 func NewChangePasswordCase(
-	repo ports.UserRepositiry,
+	repo ports.UserRepository,
 	hasher ports.PasswordHasher,
 	passwordRequirements validator.PasswordRequirements,
 ) *ChangePasswordCase {

@@ -10,6 +10,12 @@ import (
 
 var PanicMessage = "unabled to load config"
 
+type RateLimitConfig struct {
+	BaseDelay time.Duration
+	MaxDelay  time.Duration
+	FailTTL   time.Duration
+}
+
 type Config struct {
 	PGDSN             string
 	PGMinConns        int
@@ -30,6 +36,8 @@ type Config struct {
 	GRPCAddr string
 
 	LogConfig logger.LoggerStruct
+
+	RateLimitConfig RateLimitConfig
 }
 
 func Load() *Config {
@@ -60,5 +68,11 @@ func Load() *Config {
 		GRPCAddr: getGRPCAddr(),
 
 		LogConfig: getLogConfig(),
+
+		RateLimitConfig: RateLimitConfig{
+			BaseDelay: getRateLimitBaseDelay(),
+			MaxDelay:  getRateLimitMaxDelay(),
+			FailTTL:   getRateLimitFailTTL(),
+		},
 	}
 }

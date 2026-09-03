@@ -33,7 +33,10 @@ const shutdownTimeout = 10 * time.Second
 func BuildApp() {
 	cfg := config.Load()
 
-	log := logger.New(cfg.LogConfig)
+	log, err := logger.New(cfg.LogConfig)
+	if err != nil {
+		log.Error("error init logger", zap.Error(err))
+	}
 	defer log.Sync()
 
 	ctx := context.Background()
@@ -65,13 +68,28 @@ func BuildApp() {
 	getProfileCase := profile.NewGetProfileCase(repo)
 	getUserProfileCase := profile.NewGetUserProfileCase(repo)
 	changePasswordCase := auth.NewChangePasswordCase(repo, hasher, passwordRequirements)
+	updateProfileCase := profile.NewUpdateProfileCase(repo)
 
 	loggingInterceptor := interceptor.NewLoggingInterceptor(log)
 	authInterceptor := interceptor.NewAuthInterceptor(validateTokenCase)
 
+	limiterInterceptor := interceptor.NewLimiter(
+		redisClient,
+		cfg.RateLimitConfig.BaseDelay,
+		cfg.RateLimitConfig.MaxDelay,
+		cfg.RateLimitConfig.FailTTL,
+	)
+
+	validationInterceptor, err := interceptor.NewValidationInterceptor()
+	if err != nil {
+		log.Fatal("failed to init validation interceptor", zap.Error(err))
+	}
+
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			loggingInterceptor.Unary(),
+			validationInterceptor.Unary(),
+			limiterInterceptor.Unary(),
 			authInterceptor.Unary(),
 		),
 	)
@@ -87,6 +105,7 @@ func BuildApp() {
 		getProfileCase,
 		getUserProfileCase,
 		changePasswordCase,
+		updateProfileCase,
 	)
 
 	user.RegisterUserServiceServer(grpcServer, userServer)

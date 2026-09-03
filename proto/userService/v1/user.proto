@@ -1,9 +1,10 @@
 syntax = "proto3";
 package userservice.v1;
 
-option go_package = "userService/v1;user";
+option go_package = "userservice/v1;userv1";
 
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 
 service UserService {
   rpc Register (RegisterRequest) returns (RegisterResponse) {}
@@ -12,9 +13,14 @@ service UserService {
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse) {}
   rpc GetProfile (GetProfileRequest) returns (GetProfileResponse) {}
   rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse) {}
+  rpc UpdateProfile (UpdateProfileRequest) returns (UpdateProfileResponse) {} // TODO: implement
   rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse) {}
   rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse) {}
 }
+
+// TODO: add first last name for user to store
+// TODO: add proto validation
+// TODO: add commented documentation
 
 enum Role {
   ROLE_UNSPECIFIED = 0;
@@ -30,8 +36,10 @@ message AuthToken {
 }
 
 message RegisterRequest {
-  string email = 1;
-  string password = 2;
+  string email = 1 [(buf.validate.field).string.email = true];
+  string password = 2 [(buf.validate.field).string.min_len = 8];
+  string first_name = 3 [(buf.validate.field).string.min_len = 1];
+  string last_name = 4 [(buf.validate.field).string.min_len = 1];
 }
 
 message RegisterResponse {
@@ -40,8 +48,8 @@ message RegisterResponse {
 }
 
 message LoginRequest {
-  string email = 1;
-  string password = 2;
+  string email = 1 [(buf.validate.field).string.email = true];
+  string password = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message LoginResponse {
@@ -50,7 +58,7 @@ message LoginResponse {
 }
 
 message LogoutRequest {
-  string refresh_token = 1;
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message LogoutResponse {}
@@ -62,10 +70,12 @@ message GetProfileResponse {
   string email = 2;
   Role role = 3;
   google.protobuf.Timestamp created_at = 4;
+  string first_name = 5;
+  string last_name = 6;
 }
 
 message GetUserProfileRequest {
-  string user_id = 1;
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 message GetUserProfileResponse {
@@ -76,22 +86,36 @@ message GetUserProfileResponse {
 }
 
 message ChangePasswordRequest {
-  string old_password = 1;
-  string new_password = 2;
+  string old_password = 1 [(buf.validate.field).string.min_len = 1];
+  string new_password = 2 [(buf.validate.field).string.min_len = 8];
 }
 
 message ChangePasswordResponse {}
 
 message RefreshTokenRequest {
-  string refresh_token = 1;
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message RefreshTokenResponse {
   AuthToken auth_token = 1;
 }
 
+message UpdateProfileRequest {
+  optional string first_name = 1 [(buf.validate.field).string.min_len = 1];
+  optional string last_name = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateProfileResponse {
+  string user_id = 1;
+  string email = 2;
+  Role role = 3;
+  google.protobuf.Timestamp created_at = 4;
+  string first_name = 5;
+  string last_name = 6;
+}
+
 message ValidateTokenRequest {
-  string access_token = 1;
+  string access_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message ValidateTokenResponse {

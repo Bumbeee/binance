@@ -10,7 +10,7 @@ import (
 )
 
 type RegisterCase struct {
-	repo                 ports.UserRepositiry
+	repo                 ports.UserRepository
 	hasher               ports.PasswordHasher
 	tokens               ports.TokenIssuer
 	refreshTokenStore    ports.RefreshTokenStore
@@ -19,7 +19,7 @@ type RegisterCase struct {
 }
 
 func NewRegisterCase(
-	repo ports.UserRepositiry,
+	repo ports.UserRepository,
 	hasher ports.PasswordHasher,
 	tokens ports.TokenIssuer,
 	refreshTokenStore ports.RefreshTokenStore,
@@ -41,7 +41,7 @@ type RegisterResult struct {
 	ExpiresAt    time.Time
 }
 
-func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword string) (*RegisterResult, error) {
+func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword, firstName, lastName string) (*RegisterResult, error) {
 	if !validator.ValidateCreds(email, plainPassword, r.passwordRequirements) {
 		return nil, domain.ErrInvalidCreds
 	}
@@ -51,7 +51,7 @@ func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword string)
 		return nil, err
 	}
 
-	user, err := domain.NewUser(email, hash)
+	user, err := domain.NewUser(email, hash, firstName, lastName)
 	if err != nil {
 		return nil, err
 	}

@@ -8,10 +8,10 @@ import (
 )
 
 type GetProfileCase struct {
-	repo ports.UserRepositiry
+	repo ports.UserRepository
 }
 
-func NewGetProfileCase(repo ports.UserRepositiry) *GetProfileCase {
+func NewGetProfileCase(repo ports.UserRepository) *GetProfileCase {
 	return &GetProfileCase{repo: repo}
 }
 

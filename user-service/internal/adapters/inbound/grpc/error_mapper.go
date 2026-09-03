@@ -34,6 +34,12 @@ func toGRPCError(err error) error {
 	case errors.Is(err, token.ErrInvalidRefreshToken):
 		return status.Error(codes.Unauthenticated, err.Error())
 
+	case errors.Is(err, domain.ErrEmptyFirstName):
+		return status.Error(codes.InvalidArgument, err.Error())
+
+	case errors.Is(err, domain.ErrEmptyLastName):
+		return status.Error(codes.InvalidArgument, err.Error())
+
 	default:
 		return status.Error(codes.Internal, "internal error")
 	}

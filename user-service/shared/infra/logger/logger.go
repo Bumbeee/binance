@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"os"
 
 	"go.uber.org/zap"
@@ -10,7 +11,7 @@ import (
 
 type LoggerStruct struct {
 	Level             string
-	Encoding          string
+	Encoding          string // string?
 	DisableCaller     bool
 	DisableStacktrace bool
 
@@ -20,14 +21,14 @@ type LoggerStruct struct {
 	FileMaxAgeDays int
 }
 
-func New(config LoggerStruct) *zap.Logger {
+func New(config LoggerStruct) (*zap.Logger, error) {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoder := zapcore.NewJSONEncoder(encoderConfig)
 
 	level, err := zap.ParseAtomicLevel(config.Level)
 	if err != nil {
-		panic("invalid log level: " + config.Level)
+		return nil, fmt.Errorf("invalid log level: %q, error: %w", config.Level, err)
 	}
 
 	stdoutCore := zapcore.NewCore(
@@ -59,5 +60,5 @@ func New(config LoggerStruct) *zap.Logger {
 		opts = append(opts, zap.AddStacktrace(zapcore.ErrorLevel))
 	}
 
-	return zap.New(combinedCore, opts...)
+	return zap.New(combinedCore, opts...), nil
 }

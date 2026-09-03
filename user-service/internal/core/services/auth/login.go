@@ -9,7 +9,7 @@ import (
 )
 
 type LoginCase struct {
-	repo              ports.UserRepositiry
+	repo              ports.UserRepository
 	hasher            ports.PasswordHasher
 	tokens            ports.TokenIssuer
 	refreshTokenStore ports.RefreshTokenStore
@@ -18,7 +18,7 @@ type LoginCase struct {
 }
 
 func NewLoginCase(
-	repo ports.UserRepositiry,
+	repo ports.UserRepository,
 	hasher ports.PasswordHasher,
 	tokens ports.TokenIssuer,
 	refreshTokenStore ports.RefreshTokenStore,

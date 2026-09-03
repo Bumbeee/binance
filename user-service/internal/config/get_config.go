@@ -172,3 +172,17 @@ func getLogConfig() logger.LoggerStruct {
 		FileMaxAgeDays: getEnvInt("LOG_FILE_MAX_AGE_DAYS", 30),
 	}
 }
+
+// --- Rate Limit ---
+
+func getRateLimitBaseDelay() time.Duration {
+	return getEnvDuration("RATE_LIMIT_BASE_DELAY", time.Second)
+}
+
+func getRateLimitMaxDelay() time.Duration {
+	return getEnvDuration("RATE_LIMIT_MAX_DELAY", 5*time.Minute)
+}
+
+func getRateLimitFailTTL() time.Duration {
+	return getEnvDuration("RATE_LIMIT_FAIL_TTL", time.Hour)
+}

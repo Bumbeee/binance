@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log"
 	"userservice/internal/adapters/inbound/grpc/interceptor"
 	"userservice/internal/core/services/auth"
 	"userservice/internal/core/services/profile"
@@ -23,6 +24,7 @@ type Server struct {
 	getProfile     *profile.GetProfileCase
 	getUserProfile *profile.GetUserProfileCase
 	changePassword *auth.ChangePasswordCase
+	updateProfile  *profile.UpdateProfileCase
 }
 
 func NewServer(
@@ -34,6 +36,7 @@ func NewServer(
 	getProfile *profile.GetProfileCase,
 	getUserProfile *profile.GetUserProfileCase,
 	changePassword *auth.ChangePasswordCase,
+	updateProfile *profile.UpdateProfileCase,
 ) *Server {
 	return &Server{
 		register:       register,
@@ -44,11 +47,12 @@ func NewServer(
 		getProfile:     getProfile,
 		getUserProfile: getUserProfile,
 		changePassword: changePassword,
+		updateProfile:  updateProfile,
 	}
 }
 
 func (s *Server) Register(ctx context.Context, req *user.RegisterRequest) (*user.RegisterResponse, error) {
-	res, err := s.register.Execute(ctx, req.Email, req.Password)
+	res, err := s.register.Execute(ctx, req.Email, req.Password, req.FirstName, req.LastName)
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
@@ -115,4 +119,18 @@ func (s *Server) ChangePassword(ctx context.Context, req *user.ChangePasswordReq
 		return nil, toGRPCError(err)
 	}
 	return &user.ChangePasswordResponse{}, nil
+}
+
+func (s *Server) UpdateProfile(ctx context.Context, req *user.UpdateProfileRequest) (*user.UpdateProfileResponse, error) {
+	userID, ok := interceptor.UserIDFromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Internal, "user id not found in context")
+	}
+
+	res, err := s.updateProfile.Execute(ctx, userID, req.FirstName, req.LastName)
+	if err != nil {
+		log.Println("DEBUG UpdateProfile error:", err) // временно
+		return nil, toGRPCError(err)
+	}
+	return toUpdateProfileResponse(res), nil
 }

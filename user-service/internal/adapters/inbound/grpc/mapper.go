@@ -66,6 +66,17 @@ func toGetUserProfileResponse(r profile.GetUserProfileResult) *user.GetUserProfi
 	}
 }
 
+func toUpdateProfileResponse(r profile.UpdateProfileResult) *user.UpdateProfileResponse {
+	return &user.UpdateProfileResponse{
+		UserId:    r.UserID,
+		Email:     r.Email,
+		Role:      toProtoRole(r.Role),
+		CreatedAt: timestamppb.New(r.CreatedAt),
+		FirstName: r.FirstName,
+		LastName:  r.LastName,
+	}
+}
+
 func toProtoRole(r string) user.Role {
 	switch r {
 	case "admin":
