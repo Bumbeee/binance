@@ -1,4 +1,7 @@
 syntax = "proto3";
+
+// Package userservice.v1 defines the public gRPC contract for UserService:
+// registration, authentication, session management and profile operations.
 package userservice.v1;
 
 option go_package = "userservice/v1;userv1";
@@ -6,37 +9,94 @@ option go_package = "userservice/v1;userv1";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
+// UserService handles user identity: registration, login, token lifecycle
+// (issue/refresh/revoke) and profile management.
+//
+// Authentication model: clients authenticate via a short-lived JWT access
+// token (passed as "authorization: Bearer <token>" in gRPC metadata) plus a
+// long-lived opaque refresh token used to obtain new access tokens without
+// re-entering credentials.
 service UserService {
+  // Register creates a new user account and immediately issues an
+  // access/refresh token pair (auto-login on successful registration).
+  // Returns AlreadyExists if the email is already taken.
   rpc Register (RegisterRequest) returns (RegisterResponse) {}
+
+  // Login authenticates a user by email and password and issues a new
+  // access/refresh token pair. Returns Unauthenticated for both a wrong
+  // password and a non-existent email, to avoid leaking which emails are
+  // registered.
   rpc Login (LoginRequest) returns (LoginResponse) {}
+
+  // Logout revokes the given refresh token. The associated access token
+  // remains valid until it naturally expires (stateless JWT limitation).
   rpc Logout (LogoutRequest) returns (LogoutResponse) {}
+
+  // ValidateToken checks whether an access token is currently valid and
+  // returns the subject's user_id and role if so. Used internally by the
+  // auth interceptor, and exposed for other services in the system (e.g.
+  // SpotInstrumentService) to validate tokens issued by UserService without
+  // duplicating the signing secret.
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse) {}
+
+  // GetProfile returns the profile of the currently authenticated caller.
+  // The caller's identity is taken from the access token, not from the
+  // request body.
   rpc GetProfile (GetProfileRequest) returns (GetProfileResponse) {}
+
+  // GetUserProfile returns the profile of an arbitrary user by ID.
+  // Requires the caller to hold the ROLE_ADMIN role.
   rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse) {}
-  rpc UpdateProfile (UpdateProfileRequest) returns (UpdateProfileResponse) {} // TODO: implement
+
+  // UpdateProfile partially updates the caller's own profile. Fields left
+  // unset in the request are not modified; fields explicitly set to an
+  // empty string are rejected by validation rather than silently ignored.
+  rpc UpdateProfile (UpdateProfileRequest) returns (UpdateProfileResponse) {}
+
+  // ChangePassword changes the caller's own password. Requires the current
+  // password for confirmation and revokes all of the caller's active
+  // refresh tokens on success.
   rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse) {}
+
+  // RefreshToken exchanges a valid, unused refresh token for a new
+  // access/refresh token pair. The old refresh token is invalidated
+  // immediately on success (rotation), so it cannot be reused.
   rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse) {}
 }
 
-// TODO: add first last name for user to store
-// TODO: add proto validation
-// TODO: add commented documentation
-
+// Role is the set of permission levels a user account can hold.
 enum Role {
+  // ROLE_UNSPECIFIED is the zero value and should never be assigned to a
+  // real user; its presence in a response indicates a missing or
+  // unrecognized role.
   ROLE_UNSPECIFIED = 0;
+  // ROLE_USER is the default role assigned to every new account.
   ROLE_USER = 1;
+  // ROLE_ADMIN grants access to administrative operations such as
+  // GetUserProfile, and to write operations in other services (e.g.
+  // SpotInstrumentService.CreateInstrument) that check role via
+  // ValidateToken.
   ROLE_ADMIN = 2;
+  // ROLE_PREMIUM is reserved for future paid-tier functionality.
   ROLE_PREMIUM = 3;
 }
 
+// AuthToken is the pair of tokens issued on successful authentication.
 message AuthToken {
+  // access_token is a short-lived JWT used to authenticate subsequent
+  // requests. Passed as "authorization: Bearer <access_token>".
   string access_token = 1;
+  // refresh_token is a long-lived, opaque, single-use token used to obtain
+  // a new AuthToken via RefreshToken. Rotated on every use.
   string refresh_token = 2;
+  // expires_at is the expiration timestamp of access_token.
   google.protobuf.Timestamp expires_at = 3;
 }
 
+// RegisterRequest carries the data required to create a new account.
 message RegisterRequest {
   string email = 1 [(buf.validate.field).string.email = true];
+  // password is the plaintext password; never stored or logged as-is.
   string password = 2 [(buf.validate.field).string.min_len = 8];
   string first_name = 3 [(buf.validate.field).string.min_len = 1];
   string last_name = 4 [(buf.validate.field).string.min_len = 1];
@@ -47,6 +107,7 @@ message RegisterResponse {
   AuthToken auth_token = 2;
 }
 
+// LoginRequest carries credentials for an existing account.
 message LoginRequest {
   string email = 1 [(buf.validate.field).string.email = true];
   string password = 2 [(buf.validate.field).string.min_len = 1];
@@ -57,12 +118,15 @@ message LoginResponse {
   AuthToken auth_token = 2;
 }
 
+// LogoutRequest identifies the session to revoke by its refresh token.
 message LogoutRequest {
   string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message LogoutResponse {}
 
+// GetProfileRequest is empty: the target user is always the authenticated
+// caller, resolved from the access token by the auth interceptor.
 message GetProfileRequest {}
 
 message GetProfileResponse {
@@ -74,6 +138,8 @@ message GetProfileResponse {
   string last_name = 6;
 }
 
+// GetUserProfileRequest identifies an arbitrary target user by ID.
+// Calling this method requires the ROLE_ADMIN role.
 message GetUserProfileRequest {
   string user_id = 1 [(buf.validate.field).string.uuid = true];
 }
@@ -85,6 +151,9 @@ message GetUserProfileResponse {
   google.protobuf.Timestamp created_at = 4;
 }
 
+// ChangePasswordRequest carries the current and new password for the
+// authenticated caller. user_id is not included: it is resolved from the
+// access token.
 message ChangePasswordRequest {
   string old_password = 1 [(buf.validate.field).string.min_len = 1];
   string new_password = 2 [(buf.validate.field).string.min_len = 8];
@@ -92,6 +161,8 @@ message ChangePasswordRequest {
 
 message ChangePasswordResponse {}
 
+// RefreshTokenRequest carries the refresh token to exchange for a new
+// AuthToken.
 message RefreshTokenRequest {
   string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
 }
@@ -100,6 +171,9 @@ message RefreshTokenResponse {
   AuthToken auth_token = 1;
 }
 
+// UpdateProfileRequest partially updates the caller's own profile.
+// Unset (nil) fields are left unchanged; fields explicitly set to an empty
+// string are rejected by validation.
 message UpdateProfileRequest {
   optional string first_name = 1 [(buf.validate.field).string.min_len = 1];
   optional string last_name = 2 [(buf.validate.field).string.min_len = 1];
@@ -114,11 +188,14 @@ message UpdateProfileResponse {
   string last_name = 6;
 }
 
+// ValidateTokenRequest carries an access token to check.
 message ValidateTokenRequest {
   string access_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message ValidateTokenResponse {
+  // valid is false for any invalid or expired token; user_id and role are
+  // only meaningful when valid is true.
   bool valid = 1;
   string user_id = 2;
   Role role = 3;
