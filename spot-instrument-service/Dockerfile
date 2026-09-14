@@ -2,6 +2,7 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 COPY proto/ ./proto/
+COPY shared/ ./shared/
 COPY spot-instrument-service/ ./spot-instrument-service/
 
 WORKDIR /src/spot-instrument-service

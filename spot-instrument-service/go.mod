@@ -9,8 +9,10 @@ require (
 	go.uber.org/zap v1.28.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	market/shared v0.0.0-00010101000000-000000000000
 )
+
+require gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.1 // indirect
@@ -34,3 +36,5 @@ require (
 )
 
 replace market/proto => ../proto
+
+replace market/shared => ../shared

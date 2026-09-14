@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"log"
 	"userservice/internal/adapters/inbound/grpc/interceptor"
 	"userservice/internal/core/services/auth"
 	"userservice/internal/core/services/profile"
@@ -129,7 +128,6 @@ func (s *Server) UpdateProfile(ctx context.Context, req *user.UpdateProfileReque
 
 	res, err := s.updateProfile.Execute(ctx, userID, req.FirstName, req.LastName)
 	if err != nil {
-		log.Println("DEBUG UpdateProfile error:", err) // временно
 		return nil, toGRPCError(err)
 	}
 	return toUpdateProfileResponse(res), nil

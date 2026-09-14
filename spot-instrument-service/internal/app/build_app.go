@@ -14,14 +14,14 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	spotv1 "market/proto/spotinstrumentservice/v1"
+	"market/shared/infra/logger"
+	pool "market/shared/infra/pool"
 	grpcadapter "spot-instrument-service/internal/adapters/inbound/grpc"
 	"spot-instrument-service/internal/adapters/inbound/grpc/interceptor"
 	"spot-instrument-service/internal/adapters/outbound/postgres"
 	"spot-instrument-service/internal/adapters/outbound/userclient"
 	"spot-instrument-service/internal/config"
 	"spot-instrument-service/internal/core/services/instrument"
-	pool "spot-instrument-service/shared/infra"
-	"spot-instrument-service/shared/logger"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -38,7 +38,7 @@ func BuildApp() {
 
 	ctx := context.Background()
 
-	dbpool, err := pool.NewPool(ctx, cfg.PGDSN, int32(cfg.PGMinConns), int32(cfg.PGMaxConns), cfg.PGConnMaxIdleTime)
+	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}

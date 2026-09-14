@@ -1,9 +1,9 @@
 package config
 
 import (
+	"market/shared/infra/logger"
+	"market/shared/validator"
 	"time"
-	"userservice/shared/infra/logger"
-	"userservice/shared/validator"
 
 	"github.com/joho/godotenv"
 )
@@ -21,6 +21,7 @@ type Config struct {
 	PGMinConns        int
 	PGMaxConns        int
 	PGConnMaxIdleTime time.Duration
+	PGConnMaxLifetime time.Duration
 
 	RedisAddr string
 
@@ -35,7 +36,7 @@ type Config struct {
 
 	GRPCAddr string
 
-	LogConfig logger.LoggerStruct
+	LogConfig logger.LoggerConfig
 
 	RateLimitConfig RateLimitConfig
 }
@@ -52,7 +53,7 @@ func Load() *Config {
 		PGMinConns:        pgMinConns,
 		PGMaxConns:        pgMaxConns,
 		PGConnMaxIdleTime: getPGConnMaxIdleTime(),
-		// TODO: add life time
+		PGConnMaxLifetime: getPGConnMaxLifetime(),
 
 		RedisAddr: getRedisAddr(),
 

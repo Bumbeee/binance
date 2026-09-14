@@ -1,8 +1,8 @@
 package domain
 
 import (
+	"market/shared/validator"
 	"time"
-	"userservice/shared/validator"
 
 	"github.com/google/uuid"
 )

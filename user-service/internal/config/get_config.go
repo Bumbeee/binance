@@ -2,15 +2,13 @@ package config
 
 import (
 	"fmt"
+	"market/shared/infra/logger"
+	"market/shared/validator"
 	"os"
 	"strconv"
 	"time"
-	"userservice/shared/infra/logger"
-	"userservice/shared/validator"
 )
 
-// mustGetEnv возвращает значение обязательной переменной или паникует
-// с указанием, какой именно переменной не хватает.
 func mustGetEnv(key string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -79,6 +77,10 @@ func getPGMaxConns() int {
 
 func getPGConnMaxIdleTime() time.Duration {
 	return getEnvDuration("PG_MAX_IDLE_TIME", 30*time.Minute)
+}
+
+func getPGConnMaxLifetime() time.Duration {
+	return getEnvDuration("PG_MAX_CONN_LIFETIME", time.Hour)
 }
 
 // validatePGConns проверяет консистентность пула соединений.
@@ -159,10 +161,11 @@ func getGRPCAddr() string {
 
 // --- Logger ---
 
-func getLogConfig() logger.LoggerStruct {
-	return logger.LoggerStruct{
+func getLogConfig() logger.LoggerConfig {
+	return logger.LoggerConfig{
 		Level:             getEnvString("LOG_LEVEL", "info"),
-		Encoding:          getEnvString("LOG_ENCODING", "json"),
+		EncodingJSON:      getEnvBool("LOG_ENCODING_JSON", true),
+		EncodingConsole:   getEnvBool("LOG_ENCODING_CONSOLE", false),
 		DisableCaller:     getEnvBool("LOG_DISABLE_CALLER", false),
 		DisableStacktrace: getEnvBool("LOG_DISABLE_STACKTRACE", false),
 

@@ -12,15 +12,16 @@ require (
 	golang.org/x/crypto v0.54.0
 	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.12
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	market/proto v0.0.0
 )
+
+require github.com/rogpeppe/go-internal v1.16.0 // indirect
 
 replace market/proto => ../proto
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.1 // indirect
-	buf.build/go/protovalidate v1.3.0 // indirect
+	buf.build/go/protovalidate v1.3.0
 	cel.dev/expr v0.25.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -39,3 +40,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 )
+
+replace market/shared => ../shared

@@ -13,6 +13,9 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	user "market/proto/userservice/v1"
+	"market/shared/infra/logger"
+	"market/shared/infra/pool"
+	"market/shared/infra/redis"
 	grpcadapter "userservice/internal/adapters/inbound/grpc"
 	"userservice/internal/adapters/inbound/grpc/interceptor"
 	"userservice/internal/adapters/outbound/hasher"
@@ -23,9 +26,6 @@ import (
 	"userservice/internal/core/services/auth"
 	"userservice/internal/core/services/profile"
 	"userservice/internal/core/services/token"
-	"userservice/shared/infra/logger"
-	"userservice/shared/infra/pool"
-	"userservice/shared/infra/redis"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -40,7 +40,7 @@ func BuildApp() {
 	defer log.Sync()
 
 	ctx := context.Background()
-	dbpool, err := pool.NewPool(ctx, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime)
+	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}
@@ -75,6 +75,7 @@ func BuildApp() {
 
 	limiterInterceptor := interceptor.NewLimiter(
 		redisClient,
+		log,
 		cfg.RateLimitConfig.BaseDelay,
 		cfg.RateLimitConfig.MaxDelay,
 		cfg.RateLimitConfig.FailTTL,

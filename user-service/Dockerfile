@@ -2,6 +2,7 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 COPY proto/ ./proto/
+COPY shared/ ./shared/
 COPY user-service/ ./user-service/
 
 WORKDIR /src/user-service

@@ -80,8 +80,10 @@ func (r *pgxInstrumentRepository) GetByID(ctx context.Context, id string) (*doma
 }
 
 func (r *pgxInstrumentRepository) List(ctx context.Context, statusFilter *domain.InstrumentStatus) ([]*domain.Instrument, error) {
-	var rows pgx.Rows
-	var err error
+	var (
+		rows pgx.Rows
+		err  error
+	)
 
 	if statusFilter != nil {
 		query := `
@@ -125,32 +127,62 @@ func (r *pgxInstrumentRepository) List(ctx context.Context, statusFilter *domain
 	return instruments, nil
 }
 
-func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate string) error {
-	query := `UPDATE instruments SET current_rate = $1, updated_at = $2 WHERE id = $3`
+// UpdateRate persists the new rate and returns the updated instrument in a
+// single round trip via UPDATE ... RETURNING, rather than a separate
+// UPDATE followed by a GetByID.
+func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate string) (*domain.Instrument, error) {
+	query := `
+		UPDATE instruments
+		SET current_rate = $1, updated_at = $2
+		WHERE id = $3
+		RETURNING id, symbol, base_asset, quote_asset,
+		          price_precision, quantity_precision,
+		          min_order_size, current_rate, status,
+		          created_at, updated_at
+	`
 
-	tag, err := r.pool.Exec(ctx, query, rate, time.Now(), id)
-	if err != nil {
-		return fmt.Errorf("instrument_repo.UpdateRate: %w", err)
+	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, rate, time.Now(), id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrInstrumentNotFound
 	}
-	if tag.RowsAffected() == 0 {
-		return domain.ErrInstrumentNotFound
+	if err != nil {
+		return nil, fmt.Errorf("instrument_repo.UpdateRate: %w", err)
+	}
+
+	return instrument, nil
+}
+
+func (r *pgxInstrumentRepository) UpdateRateBySymbol(ctx context.Context, symbol, rate string) error {
+	query := `UPDATE instruments SET current_rate = $1, updated_at = $2 WHERE symbol = $3`
+
+	_, err := r.pool.Exec(ctx, query, rate, time.Now(), symbol)
+	if err != nil {
+		return fmt.Errorf("instrument_repo.UpdateRateBySymbol: %w", err)
 	}
 
 	return nil
 }
 
-func (r *pgxInstrumentRepository) UpdateStatus(ctx context.Context, id string, status domain.InstrumentStatus) error {
-	query := `UPDATE instruments SET status = $1, updated_at = $2 WHERE id = $3`
+func (r *pgxInstrumentRepository) UpdateStatus(ctx context.Context, id string, status domain.InstrumentStatus) (*domain.Instrument, error) {
+	query := `
+		UPDATE instruments
+		SET status = $1, updated_at = $2
+		WHERE id = $3
+		RETURNING id, symbol, base_asset, quote_asset,
+		          price_precision, quantity_precision,
+		          min_order_size, current_rate, status,
+		          created_at, updated_at
+	`
 
-	tag, err := r.pool.Exec(ctx, query, string(status), time.Now(), id)
+	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, string(status), time.Now(), id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrInstrumentNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("instrument_repo.UpdateStatus: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return domain.ErrInstrumentNotFound
+		return nil, fmt.Errorf("instrument_repo.UpdateStatus: %w", err)
 	}
 
-	return nil
+	return instrument, nil
 }
 
 type rowScanner interface {

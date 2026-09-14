@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"time"
+
 	"userservice/internal/core/ports"
 )
 
@@ -35,15 +36,11 @@ type RefreshTokenResult struct {
 }
 
 func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) (*RefreshTokenResult, error) {
-	userID, err := r.store.GetUserID(ctx, oldRefreshToken)
+	userID, err := r.store.GetAndDelete(ctx, oldRefreshToken)
 	if err != nil {
 		if errors.Is(err, ports.ErrKeyNotFound) {
 			return nil, ErrInvalidRefreshToken
 		}
-		return nil, err
-	}
-
-	if err := r.store.Delete(ctx, oldRefreshToken); err != nil {
 		return nil, err
 	}
 

@@ -2,13 +2,12 @@ package interceptor
 
 import (
 	"context"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	tools "market/shared/tools/grpc"
 	"userservice/internal/core/domain"
 	"userservice/internal/core/services/token"
 )
@@ -45,7 +44,7 @@ func (a *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 
-		accessToken, err := extractToken(ctx)
+		accessToken, err := tools.ExtractToken(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -62,33 +61,16 @@ func (a *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 		}
 
 		ctx = context.WithValue(ctx, userIDContextKey, result.UserID)
-		ctx = context.WithValue(ctx, userRoleContextKey, result.Role)
+		ctx = context.WithValue(ctx, userRoleContextKey, string(result.Role))
 		return handler(ctx, req)
 	}
 }
 
-func extractToken(ctx context.Context) (string, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", status.Error(codes.Unauthenticated, "missing metadata")
-	}
-	values := md.Get("authorization")
-	if len(values) == 0 {
-		return "", status.Error(codes.Unauthenticated, "missing authorization header")
-	}
-	parts := strings.SplitN(values[0], " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return "", status.Error(codes.Unauthenticated, "invalid authorization header format")
-	}
-	return parts[1], nil
-}
-
 func UserIDFromContext(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDContextKey).(string)
-	return userID, ok
+	return tools.ValueFromContext(ctx, userIDContextKey)
 }
 
 func UserRoleFromContext(ctx context.Context) (domain.Role, bool) {
-	role, ok := ctx.Value(userRoleContextKey).(domain.Role)
-	return role, ok
+	role, ok := tools.ValueFromContext(ctx, userRoleContextKey)
+	return domain.Role(role), ok
 }

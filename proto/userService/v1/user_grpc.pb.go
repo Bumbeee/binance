@@ -4,6 +4,9 @@
 // - protoc             (unknown)
 // source: userservice/v1/user.proto
 
+// Package userservice.v1 defines the public gRPC contract for UserService:
+// registration, authentication, session management and profile operations.
+
 package userv1
 
 import (
@@ -33,15 +36,51 @@ const (
 // UserServiceClient is the client API for UserService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// UserService handles user identity: registration, login, token lifecycle
+// (issue/refresh/revoke) and profile management.
+//
+// Authentication model: clients authenticate via a short-lived JWT access
+// token (passed as "authorization: Bearer <token>" in gRPC metadata) plus a
+// long-lived opaque refresh token used to obtain new access tokens without
+// re-entering credentials.
 type UserServiceClient interface {
+	// Register creates a new user account and immediately issues an
+	// access/refresh token pair (auto-login on successful registration).
+	// Returns AlreadyExists if the email is already taken.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
+	// Login authenticates a user by email and password and issues a new
+	// access/refresh token pair. Returns Unauthenticated for both a wrong
+	// password and a non-existent email, to avoid leaking which emails are
+	// registered.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
+	// Logout revokes the given refresh token. The associated access token
+	// remains valid until it naturally expires (stateless JWT limitation).
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
+	// ValidateToken checks whether an access token is currently valid and
+	// returns the subject's user_id and role if so. Used internally by the
+	// auth interceptor, and exposed for other services in the system (e.g.
+	// SpotInstrumentService) to validate tokens issued by UserService without
+	// duplicating the signing secret.
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*ValidateTokenResponse, error)
+	// GetProfile returns the profile of the currently authenticated caller.
+	// The caller's identity is taken from the access token, not from the
+	// request body.
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
+	// GetUserProfile returns the profile of an arbitrary user by ID.
+	// Requires the caller to hold the ROLE_ADMIN role.
 	GetUserProfile(ctx context.Context, in *GetUserProfileRequest, opts ...grpc.CallOption) (*GetUserProfileResponse, error)
+	// UpdateProfile partially updates the caller's own profile. Fields left
+	// unset in the request are not modified; fields explicitly set to an
+	// empty string are rejected by validation rather than silently ignored.
 	UpdateProfile(ctx context.Context, in *UpdateProfileRequest, opts ...grpc.CallOption) (*UpdateProfileResponse, error)
+	// ChangePassword changes the caller's own password. Requires the current
+	// password for confirmation and revokes all of the caller's active
+	// refresh tokens on success.
 	ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error)
+	// RefreshToken exchanges a valid, unused refresh token for a new
+	// access/refresh token pair. The old refresh token is invalidated
+	// immediately on success (rotation), so it cannot be reused.
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
 }
 
@@ -146,15 +185,51 @@ func (c *userServiceClient) RefreshToken(ctx context.Context, in *RefreshTokenRe
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
+//
+// UserService handles user identity: registration, login, token lifecycle
+// (issue/refresh/revoke) and profile management.
+//
+// Authentication model: clients authenticate via a short-lived JWT access
+// token (passed as "authorization: Bearer <token>" in gRPC metadata) plus a
+// long-lived opaque refresh token used to obtain new access tokens without
+// re-entering credentials.
 type UserServiceServer interface {
+	// Register creates a new user account and immediately issues an
+	// access/refresh token pair (auto-login on successful registration).
+	// Returns AlreadyExists if the email is already taken.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
+	// Login authenticates a user by email and password and issues a new
+	// access/refresh token pair. Returns Unauthenticated for both a wrong
+	// password and a non-existent email, to avoid leaking which emails are
+	// registered.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
+	// Logout revokes the given refresh token. The associated access token
+	// remains valid until it naturally expires (stateless JWT limitation).
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
+	// ValidateToken checks whether an access token is currently valid and
+	// returns the subject's user_id and role if so. Used internally by the
+	// auth interceptor, and exposed for other services in the system (e.g.
+	// SpotInstrumentService) to validate tokens issued by UserService without
+	// duplicating the signing secret.
 	ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error)
+	// GetProfile returns the profile of the currently authenticated caller.
+	// The caller's identity is taken from the access token, not from the
+	// request body.
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
+	// GetUserProfile returns the profile of an arbitrary user by ID.
+	// Requires the caller to hold the ROLE_ADMIN role.
 	GetUserProfile(context.Context, *GetUserProfileRequest) (*GetUserProfileResponse, error)
+	// UpdateProfile partially updates the caller's own profile. Fields left
+	// unset in the request are not modified; fields explicitly set to an
+	// empty string are rejected by validation rather than silently ignored.
 	UpdateProfile(context.Context, *UpdateProfileRequest) (*UpdateProfileResponse, error)
+	// ChangePassword changes the caller's own password. Requires the current
+	// password for confirmation and revokes all of the caller's active
+	// refresh tokens on success.
 	ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error)
+	// RefreshToken exchanges a valid, unused refresh token for a new
+	// access/refresh token pair. The old refresh token is invalidated
+	// immediately on success (rotation), so it cannot be reused.
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }

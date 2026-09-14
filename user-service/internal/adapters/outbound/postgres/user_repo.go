@@ -52,7 +52,7 @@ func (repo *pgxRepository) GetByEmail(ctx context.Context, email string) (*domai
 	`
 
 	var (
-		id           string
+		id           uuid.UUID
 		emailValue   string
 		passwordHash string
 		role         string
@@ -69,7 +69,7 @@ func (repo *pgxRepository) GetByEmail(ctx context.Context, email string) (*domai
 		return nil, fmt.Errorf("user_repo.GetByEmail: %w", err)
 	}
 
-	return rowToUser(id, emailValue, passwordHash, role, createdAt)
+	return rowToUser(id, emailValue, passwordHash, role, createdAt), nil
 }
 
 func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
@@ -80,7 +80,7 @@ func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.Use
 	`
 
 	var (
-		userID       string
+		userID       uuid.UUID
 		emailValue   string
 		passwordHash string
 		role         string
@@ -97,22 +97,17 @@ func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.Use
 		return nil, fmt.Errorf("user_repo.FindByID: %w", err)
 	}
 
-	return rowToUser(userID, emailValue, passwordHash, role, createdAt)
+	return rowToUser(userID, emailValue, passwordHash, role, createdAt), nil
 }
 
-func rowToUser(id, email, passwordHash, role string, createdAt time.Time) (*domain.User, error) {
-	parsedID, err := uuid.Parse(id) // TODO: check if needed to parse string to UUID
-	if err != nil {
-		return nil, fmt.Errorf("user_repo: invalid user id in db: %w", err)
-	}
-
+func rowToUser(id uuid.UUID, email, passwordHash, role string, createdAt time.Time) *domain.User {
 	return &domain.User{
-		ID:           parsedID,
+		ID:           id,
 		Email:        email,
 		PasswordHash: passwordHash,
 		Role:         domain.Role(role),
 		CreatedAt:    createdAt,
-	}, nil
+	}
 }
 
 func (repo *pgxRepository) UpdatePasswordHash(ctx context.Context, userID, newPasswordHash string) error {
@@ -129,15 +124,20 @@ func (repo *pgxRepository) UpdatePasswordHash(ctx context.Context, userID, newPa
 }
 
 func (repo *pgxRepository) UpdateProfile(ctx context.Context, userID string, firstName, lastName *string) error {
-	if firstName != nil {
-		if _, err := repo.pool.Exec(ctx, `UPDATE users SET first_name = $1 WHERE id = $2`, *firstName, userID); err != nil {
-			return fmt.Errorf("user_repo.UpdateProfile: %w", err)
-		}
+	query := `
+		UPDATE users
+		SET first_name = COALESCE($1, first_name),
+		    last_name  = COALESCE($2, last_name)
+		WHERE id = $3
+	`
+
+	tag, err := repo.pool.Exec(ctx, query, firstName, lastName, userID)
+	if err != nil {
+		return fmt.Errorf("user_repo.UpdateProfile: %w", err)
 	}
-	if lastName != nil {
-		if _, err := repo.pool.Exec(ctx, `UPDATE users SET last_name = $1 WHERE id = $2`, *lastName, userID); err != nil {
-			return fmt.Errorf("user_repo.UpdateProfile: %w", err)
-		}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
 	}
+
 	return nil
 }

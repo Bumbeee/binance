@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"spot-instrument-service/shared/logger"
+	"market/shared/infra/logger"
 )
 
 func mustGetEnv(key string) string {
@@ -79,6 +79,10 @@ func getPGConnMaxIdleTime() time.Duration {
 	return getEnvDuration("PG_MAX_IDLE_TIME", 30*time.Minute)
 }
 
+func getPGConnMaxLifetime() time.Duration {
+	return getEnvDuration("PG_MAX_CONN_LIFETIME", time.Hour)
+}
+
 func validatePGConns(min, max int) {
 	if min < 0 || max < 0 {
 		panic(fmt.Sprintf("%s: PG_MIN_CONNECTIONS and PG_MAX_CONNECTIONS must be non-negative", PanicMessage))
@@ -102,10 +106,11 @@ func getUserServiceAddr() string {
 
 // --- Logger ---
 
-func getLogConfig() logger.LoggerStruct {
-	return logger.LoggerStruct{
+func getLogConfig() logger.LoggerConfig {
+	return logger.LoggerConfig{
 		Level:             getEnvString("LOG_LEVEL", "info"),
-		Encoding:          getEnvString("LOG_ENCODING", "json"),
+		EncodingJSON:      getEnvBool("LOG_ENCODING_JSON", true),
+		EncodingConsole:   getEnvBool("LOG_ENCODING_CONSOLE", false),
 		DisableCaller:     getEnvBool("LOG_DISABLE_CALLER", false),
 		DisableStacktrace: getEnvBool("LOG_DISABLE_STACKTRACE", false),
 

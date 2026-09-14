@@ -2,11 +2,11 @@ package auth
 
 import (
 	"context"
+	"market/shared/validator"
 	"time"
 	"userservice/internal/core/domain"
 	"userservice/internal/core/ports"
 	"userservice/internal/core/services/token"
-	"userservice/shared/validator"
 )
 
 type RegisterCase struct {
@@ -42,7 +42,7 @@ type RegisterResult struct {
 }
 
 func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword, firstName, lastName string) (*RegisterResult, error) {
-	if !validator.ValidateCreds(email, plainPassword, r.passwordRequirements) {
+	if !ValidateCreds(email, plainPassword, r.passwordRequirements) {
 		return nil, domain.ErrInvalidCreds
 	}
 
@@ -55,8 +55,6 @@ func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword, firstN
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: check email for unique
 
 	if err := r.repo.Save(ctx, user); err != nil {
 		return nil, err

@@ -2,6 +2,7 @@ package userclient
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -31,9 +32,13 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) Validate(ctx context.Context, accessToken string) (userID string, role string, valid bool, err error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	resp, err := c.stub.ValidateToken(ctx, &user.ValidateTokenRequest{
 		AccessToken: accessToken,
 	})
+
 	if err != nil {
 		return "", "", false, err
 	}

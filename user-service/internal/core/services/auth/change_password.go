@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"market/shared/validator"
 	"userservice/internal/core/ports"
-	"userservice/shared/validator"
 )
 
 type ChangePasswordCase struct {

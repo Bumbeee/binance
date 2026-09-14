@@ -15,11 +15,7 @@ func NewUpdateRateCase(repo ports.InstrumentRepository) *UpdateRateCase {
 }
 
 func (uc *UpdateRateCase) Execute(ctx context.Context, id, rate string) (*InstrumentResult, error) {
-	if err := uc.repo.UpdateRate(ctx, id, rate); err != nil {
-		return nil, err
-	}
-
-	inst, err := uc.repo.GetByID(ctx, id)
+	inst, err := uc.repo.UpdateRate(ctx, id, rate)
 	if err != nil {
 		return nil, err
 	}

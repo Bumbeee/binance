@@ -2,10 +2,10 @@ package auth
 
 import (
 	"context"
+	"market/shared/validator"
 	"time"
 	"userservice/internal/core/ports"
 	"userservice/internal/core/services/token"
-	"userservice/shared/validator"
 )
 
 type LoginCase struct {

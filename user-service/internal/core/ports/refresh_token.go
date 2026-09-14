@@ -10,6 +10,7 @@ var ErrKeyNotFound = errors.New("key not found")
 
 type RefreshTokenStore interface {
 	Save(ctx context.Context, refreshToken, userID string, ttl time.Duration) error
-	GetUserID(ctx context.Context, refreshToken string) (string, error)
+	GetAndDelete(ctx context.Context, refreshToken string) (userID string, err error)
 	Delete(ctx context.Context, refreshToken string) error
+	DeleteAllByUserID(ctx context.Context, userID string) error
 }

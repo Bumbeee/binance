@@ -16,11 +16,7 @@ func NewArchiveInstrumentCase(repo ports.InstrumentRepository) *ArchiveInstrumen
 }
 
 func (uc *ArchiveInstrumentCase) Execute(ctx context.Context, id string) (*InstrumentResult, error) {
-	if err := uc.repo.UpdateStatus(ctx, id, domain.InstrumentStatusDelisted); err != nil {
-		return nil, err
-	}
-
-	inst, err := uc.repo.GetByID(ctx, id)
+	inst, err := uc.repo.UpdateStatus(ctx, id, domain.InstrumentStatusDelisted)
 	if err != nil {
 		return nil, err
 	}
