@@ -45,7 +45,7 @@ func BuildApp() {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}
 
-	redisClient := redis.NewRedisClient(cfg.RedisAddr)
+	redisClient := redis.NewRedisClient(cfg.RedisConfig)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("failed to connect to redis", zap.Error(err))
 	}

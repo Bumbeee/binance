@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"market/shared/infra/logger"
+	"market/shared/infra/redis"
 	"market/shared/validator"
 	"os"
 	"strconv"
@@ -95,8 +96,19 @@ func validatePGConns(min, max int) {
 
 // --- Redis ---
 
-func getRedisAddr() string {
-	return mustGetEnv("REDIS_ADDR")
+func getRedisConfig() redis.RedisConfig {
+	return redis.RedisConfig{
+		Addr:     mustGetEnv("REDIS_ADDR"),
+		Password: getEnvString("REDIS_PASSWORD", ""),
+		DB:       getEnvInt("REDIS_DB", 0),
+
+		DialTimeout:  getEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		ReadTimeout:  getEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		WriteTimeout: getEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+
+		PoolSize:     getEnvInt("REDIS_POOL_SIZE", 10),
+		MinIdleConns: getEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+	}
 }
 
 // --- Hasher ---

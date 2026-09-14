@@ -2,6 +2,7 @@ package config
 
 import (
 	"market/shared/infra/logger"
+	"market/shared/infra/redis"
 	"market/shared/validator"
 	"time"
 
@@ -23,7 +24,7 @@ type Config struct {
 	PGConnMaxIdleTime time.Duration
 	PGConnMaxLifetime time.Duration
 
-	RedisAddr string
+	RedisConfig redis.RedisConfig
 
 	HasherCost int
 
@@ -55,7 +56,7 @@ func Load() *Config {
 		PGConnMaxIdleTime: getPGConnMaxIdleTime(),
 		PGConnMaxLifetime: getPGConnMaxLifetime(),
 
-		RedisAddr: getRedisAddr(),
+		RedisConfig: getRedisConfig(),
 
 		HasherCost: getHasherCost(),
 
