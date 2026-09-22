@@ -1174,7 +1174,7 @@ const file_userservice_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"o\n" +
 	"\x15ChangePasswordRequest\x12*\n" +
-	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\voldPassword\x12*\n" +
+	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\bR\voldPassword\x12*\n" +
 	"\fnew_password\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\bR\vnewPassword\"\x18\n" +
 	"\x16ChangePasswordResponse\"C\n" +
 	"\x13RefreshTokenRequest\x12,\n" +

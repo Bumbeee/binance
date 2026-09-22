@@ -138,9 +138,11 @@ func (OrderType) EnumDescriptor() ([]byte, []int) {
 type OrderStatus int32
 
 const (
-	OrderStatus_ORDER_STATUS_UNSPECIFIED OrderStatus = 0
-	OrderStatus_ORDER_STATUS_OPEN        OrderStatus = 1
-	OrderStatus_ORDER_STATUS_CANCELLED   OrderStatus = 2
+	OrderStatus_ORDER_STATUS_UNSPECIFIED      OrderStatus = 0
+	OrderStatus_ORDER_STATUS_OPEN             OrderStatus = 1
+	OrderStatus_ORDER_STATUS_CANCELLED        OrderStatus = 2
+	OrderStatus_ORDER_STATUS_PARTIALLY_FILLED OrderStatus = 3
+	OrderStatus_ORDER_STATUS_FILLED           OrderStatus = 4
 )
 
 // Enum value maps for OrderStatus.
@@ -149,11 +151,15 @@ var (
 		0: "ORDER_STATUS_UNSPECIFIED",
 		1: "ORDER_STATUS_OPEN",
 		2: "ORDER_STATUS_CANCELLED",
+		3: "ORDER_STATUS_PARTIALLY_FILLED",
+		4: "ORDER_STATUS_FILLED",
 	}
 	OrderStatus_value = map[string]int32{
-		"ORDER_STATUS_UNSPECIFIED": 0,
-		"ORDER_STATUS_OPEN":        1,
-		"ORDER_STATUS_CANCELLED":   2,
+		"ORDER_STATUS_UNSPECIFIED":      0,
+		"ORDER_STATUS_OPEN":             1,
+		"ORDER_STATUS_CANCELLED":        2,
+		"ORDER_STATUS_PARTIALLY_FILLED": 3,
+		"ORDER_STATUS_FILLED":           4,
 	}
 )
 
@@ -197,13 +203,14 @@ type Order struct {
 	Side         OrderSide              `protobuf:"varint,4,opt,name=side,proto3,enum=orderservice.v1.OrderSide" json:"side,omitempty"`
 	Type         OrderType              `protobuf:"varint,5,opt,name=type,proto3,enum=orderservice.v1.OrderType" json:"type,omitempty"`
 	// price is empty for market orders.
-	Price         string                 `protobuf:"bytes,6,opt,name=price,proto3" json:"price,omitempty"`
-	Quantity      string                 `protobuf:"bytes,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	Status        OrderStatus            `protobuf:"varint,8,opt,name=status,proto3,enum=orderservice.v1.OrderStatus" json:"status,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Price             string                 `protobuf:"bytes,6,opt,name=price,proto3" json:"price,omitempty"`
+	Quantity          string                 `protobuf:"bytes,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Status            OrderStatus            `protobuf:"varint,8,opt,name=status,proto3,enum=orderservice.v1.OrderStatus" json:"status,omitempty"`
+	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	RemainingQuantity string                 `protobuf:"bytes,11,opt,name=remaining_quantity,json=remainingQuantity,proto3" json:"remaining_quantity,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
@@ -304,6 +311,13 @@ func (x *Order) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Order) GetRemainingQuantity() string {
+	if x != nil {
+		return x.RemainingQuantity
+	}
+	return ""
 }
 
 type CreateOrderRequest struct {
@@ -520,7 +534,14 @@ type ListOrdersRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// status_filter restricts the result to orders with this status. Unset
 	// returns orders of every status.
-	StatusFilter  *OrderStatus `protobuf:"varint,1,opt,name=status_filter,json=statusFilter,proto3,enum=orderservice.v1.OrderStatus,oneof" json:"status_filter,omitempty"`
+	StatusFilter *OrderStatus `protobuf:"varint,1,opt,name=status_filter,json=statusFilter,proto3,enum=orderservice.v1.OrderStatus,oneof" json:"status_filter,omitempty"`
+	// page_size is the maximum number of orders to return. Defaults to 20
+	// if unset or zero; capped at 100.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token, if present, continues a previous ListOrders call. Opaque:
+	// callers must not construct or parse it themselves, only pass back
+	// what a prior response returned in next_page_token.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -562,9 +583,25 @@ func (x *ListOrdersRequest) GetStatusFilter() OrderStatus {
 	return OrderStatus_ORDER_STATUS_UNSPECIFIED
 }
 
+func (x *ListOrdersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListOrdersRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListOrdersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Orders        []*Order               `protobuf:"bytes,1,rep,name=orders,proto3" json:"orders,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Orders []*Order               `protobuf:"bytes,1,rep,name=orders,proto3" json:"orders,omitempty"`
+	// next_page_token is empty when there are no more results.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -604,6 +641,13 @@ func (x *ListOrdersResponse) GetOrders() []*Order {
 		return x.Orders
 	}
 	return nil
+}
+
+func (x *ListOrdersResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type CancelOrderRequest struct {
@@ -698,7 +742,7 @@ var File_orderservice_v1_order_proto protoreflect.FileDescriptor
 
 const file_orderservice_v1_order_proto_rawDesc = "" +
 	"\n" +
-	"\x1borderservice/v1/order.proto\x12\x0forderservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\x93\x03\n" +
+	"\x1borderservice/v1/order.proto\x12\x0forderservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xc2\x03\n" +
 	"\x05Order\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12#\n" +
@@ -712,7 +756,8 @@ const file_orderservice_v1_order_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x8a\x02\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12-\n" +
+	"\x12remaining_quantity\x18\v \x01(\tR\x11remainingQuantity\"\x8a\x02\n" +
 	"\x12CreateOrderRequest\x12-\n" +
 	"\rinstrument_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\finstrumentId\x128\n" +
 	"\x04side\x18\x02 \x01(\x0e2\x1a.orderservice.v1.OrderSideB\b\xbaH\x05\x82\x01\x02 \x00R\x04side\x128\n" +
@@ -725,12 +770,16 @@ const file_orderservice_v1_order_proto_rawDesc = "" +
 	"\x0fGetOrderRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"@\n" +
 	"\x10GetOrderResponse\x12,\n" +
-	"\x05order\x18\x01 \x01(\v2\x16.orderservice.v1.OrderR\x05order\"m\n" +
+	"\x05order\x18\x01 \x01(\v2\x16.orderservice.v1.OrderR\x05order\"\xb4\x01\n" +
 	"\x11ListOrdersRequest\x12F\n" +
-	"\rstatus_filter\x18\x01 \x01(\x0e2\x1c.orderservice.v1.OrderStatusH\x00R\fstatusFilter\x88\x01\x01B\x10\n" +
-	"\x0e_status_filter\"D\n" +
+	"\rstatus_filter\x18\x01 \x01(\x0e2\x1c.orderservice.v1.OrderStatusH\x00R\fstatusFilter\x88\x01\x01\x12&\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageTokenB\x10\n" +
+	"\x0e_status_filter\"l\n" +
 	"\x12ListOrdersResponse\x12.\n" +
-	"\x06orders\x18\x01 \x03(\v2\x16.orderservice.v1.OrderR\x06orders\".\n" +
+	"\x06orders\x18\x01 \x03(\v2\x16.orderservice.v1.OrderR\x06orders\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\".\n" +
 	"\x12CancelOrderRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"C\n" +
 	"\x13CancelOrderResponse\x12,\n" +
@@ -742,11 +791,13 @@ const file_orderservice_v1_order_proto_rawDesc = "" +
 	"\tOrderType\x12\x1a\n" +
 	"\x16ORDER_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11ORDER_TYPE_MARKET\x10\x01\x12\x14\n" +
-	"\x10ORDER_TYPE_LIMIT\x10\x02*^\n" +
+	"\x10ORDER_TYPE_LIMIT\x10\x02*\x9a\x01\n" +
 	"\vOrderStatus\x12\x1c\n" +
 	"\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11ORDER_STATUS_OPEN\x10\x01\x12\x1a\n" +
-	"\x16ORDER_STATUS_CANCELLED\x10\x022\xf2\x02\n" +
+	"\x16ORDER_STATUS_CANCELLED\x10\x02\x12!\n" +
+	"\x1dORDER_STATUS_PARTIALLY_FILLED\x10\x03\x12\x17\n" +
+	"\x13ORDER_STATUS_FILLED\x10\x042\xf2\x02\n" +
 	"\fOrderService\x12Z\n" +
 	"\vCreateOrder\x12#.orderservice.v1.CreateOrderRequest\x1a$.orderservice.v1.CreateOrderResponse\"\x00\x12Q\n" +
 	"\bGetOrder\x12 .orderservice.v1.GetOrderRequest\x1a!.orderservice.v1.GetOrderResponse\"\x00\x12W\n" +

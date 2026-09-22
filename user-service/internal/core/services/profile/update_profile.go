@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"time"
+
 	"userservice/internal/core/domain"
 	"userservice/internal/core/ports"
 )
@@ -24,24 +25,20 @@ type UpdateProfileResult struct {
 	CreatedAt time.Time
 }
 
-func (up *UpdateProfileCase) Execute(ctx context.Context, userID string, firstName, lastName *string) (UpdateProfileResult, error) {
+func (up *UpdateProfileCase) Execute(ctx context.Context, userID string, firstName, lastName *string) (*UpdateProfileResult, error) {
 	if firstName != nil && !domain.ValidateName(*firstName) {
-		return UpdateProfileResult{}, domain.ErrEmptyFirstName
+		return nil, domain.ErrEmptyFirstName
 	}
 	if lastName != nil && !domain.ValidateName(*lastName) {
-		return UpdateProfileResult{}, domain.ErrEmptyLastName
+		return nil, domain.ErrEmptyLastName
 	}
 
-	if err := up.repo.UpdateProfile(ctx, userID, firstName, lastName); err != nil {
-		return UpdateProfileResult{}, err
-	}
-
-	u, err := up.repo.FindByID(ctx, userID)
+	u, err := up.repo.UpdateProfile(ctx, userID, firstName, lastName)
 	if err != nil {
-		return UpdateProfileResult{}, err
+		return nil, err
 	}
 
-	return UpdateProfileResult{
+	return &UpdateProfileResult{
 		UserID:    u.ID.String(),
 		Email:     u.Email,
 		Role:      string(u.Role),

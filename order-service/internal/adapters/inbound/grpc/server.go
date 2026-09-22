@@ -85,7 +85,7 @@ func (s *Server) ListOrders(ctx context.Context, req *orderv1.ListOrdersRequest)
 		statusFilter = &s
 	}
 
-	res, err := s.listOrders.Execute(ctx, userID, statusFilter)
+	res, err := s.listOrders.Execute(ctx, userID, statusFilter, req.PageSize, req.PageToken)
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

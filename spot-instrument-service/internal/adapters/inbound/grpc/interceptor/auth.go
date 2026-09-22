@@ -7,9 +7,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"spot-instrument-service/internal/core/ports"
-
+	user "market/proto/userservice/v1"
 	tools "market/shared/tools/grpc"
+	"spot-instrument-service/internal/core/ports"
 )
 
 type contextKey string
@@ -25,9 +25,9 @@ var publicMethods = map[string]bool{
 }
 
 var requiredRoles = map[string]string{
-	"/spotinstrumentservice.v1.SpotInstrumentService/CreateInstrument":  "ROLE_ADMIN",
-	"/spotinstrumentservice.v1.SpotInstrumentService/ArchiveInstrument": "ROLE_ADMIN",
-	"/spotinstrumentservice.v1.SpotInstrumentService/UpdateRate":        "ROLE_ADMIN",
+	"/spotinstrumentservice.v1.SpotInstrumentService/CreateInstrument":  user.Role_ROLE_ADMIN.String(),
+	"/spotinstrumentservice.v1.SpotInstrumentService/ArchiveInstrument": user.Role_ROLE_ADMIN.String(),
+	"/spotinstrumentservice.v1.SpotInstrumentService/UpdateRate":        user.Role_ROLE_ADMIN.String(),
 }
 
 type AuthInterceptor struct {

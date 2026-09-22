@@ -19,13 +19,11 @@ import (
 
 	grpcadapter "order-service/internal/adapters/inbound/grpc"
 	"order-service/internal/adapters/inbound/grpc/interceptor"
-	"order-service/internal/adapters/outbound/client"
+	client "order-service/internal/adapters/outbound/client"
 	"order-service/internal/adapters/outbound/postgres"
 	"order-service/internal/config"
 	"order-service/internal/core/services/order"
 )
-
-const shutdownTimeout = 10 * time.Second
 
 func BuildApp() {
 	cfg := config.Load()
@@ -44,7 +42,7 @@ func BuildApp() {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}
 
-	userClient, err := client.New(cfg.UserServiceAddr)
+	userClient, err := client.New(cfg.UserServiceAddr, cfg.UserServiceTimeout)
 	if err != nil {
 		log.Fatal("failed to connect to user-service", zap.Error(err))
 	}
@@ -114,7 +112,7 @@ func BuildApp() {
 	select {
 	case <-stopped:
 		log.Info("grpc server stopped gracefully")
-	case <-time.After(shutdownTimeout):
+	case <-time.After(cfg.ShutdownTimeout):
 		log.Warn("graceful shutdown timed out, forcing stop")
 		grpcServer.Stop()
 	}

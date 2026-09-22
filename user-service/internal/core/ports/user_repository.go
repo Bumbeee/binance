@@ -10,5 +10,5 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindByID(ctx context.Context, id string) (*domain.User, error)
 	UpdatePasswordHash(ctx context.Context, userID, newPasswordHash string) error
-	UpdateProfile(ctx context.Context, userID string, firstName, lastName *string) error
+	UpdateProfile(ctx context.Context, userID string, firstName, lastName *string) (*domain.User, error)
 }

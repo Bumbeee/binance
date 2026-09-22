@@ -155,7 +155,7 @@ message GetUserProfileResponse {
 // authenticated caller. user_id is not included: it is resolved from the
 // access token.
 message ChangePasswordRequest {
-  string old_password = 1 [(buf.validate.field).string.min_len = 1];
+  string old_password = 1 [(buf.validate.field).string.min_len = 8];
   string new_password = 2 [(buf.validate.field).string.min_len = 8];
 }
 

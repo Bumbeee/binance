@@ -9,6 +9,6 @@ var (
 	ErrPriceRequiredForLimit    = errors.New("price is required for limit orders")
 	ErrPriceNotAllowedForMarket = errors.New("price is not allowed for market orders")
 	ErrOrderNotFound            = errors.New("order not found")
-	ErrOrderAlreadyCancelled    = errors.New("order is already cancelled")
+	ErrOrderAlreadyTerminal     = errors.New("order is already in a terminal state")
 	ErrNotOrderOwner            = errors.New("caller does not own this order")
 )

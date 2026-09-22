@@ -17,13 +17,24 @@ func NewListOrdersCase(repo ports.OrderRepository) *ListOrdersCase {
 	return &ListOrdersCase{repo: repo}
 }
 
-func (uc *ListOrdersCase) Execute(ctx context.Context, callerUserID string, statusFilter *domain.OrderStatus) ([]*OrderResult, error) {
+type ListOrdersResult struct {
+	Orders        []*OrderResult
+	NextPageToken string
+}
+
+func (uc *ListOrdersCase) Execute(
+	ctx context.Context,
+	callerUserID string,
+	statusFilter *domain.OrderStatus,
+	pageSize int32,
+	pageToken string,
+) (*ListOrdersResult, error) {
 	parsedCallerID, err := uuid.Parse(callerUserID)
 	if err != nil {
 		return nil, err
 	}
 
-	orders, err := uc.repo.ListByUserID(ctx, parsedCallerID, statusFilter)
+	orders, nextPageToken, err := uc.repo.ListByUserID(ctx, parsedCallerID, statusFilter, pageSize, pageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -33,5 +44,5 @@ func (uc *ListOrdersCase) Execute(ctx context.Context, callerUserID string, stat
 		results = append(results, toResult(o))
 	}
 
-	return results, nil
+	return &ListOrdersResult{Orders: results, NextPageToken: nextPageToken}, nil
 }

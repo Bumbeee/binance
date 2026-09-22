@@ -15,7 +15,7 @@ func toGRPCError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domain.ErrNotOrderOwner):
 		return status.Error(codes.PermissionDenied, err.Error())
-	case errors.Is(err, domain.ErrOrderAlreadyCancelled):
+	case errors.Is(err, domain.ErrOrderAlreadyTerminal):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, domain.ErrInvalidSide),
 		errors.Is(err, domain.ErrInvalidType),

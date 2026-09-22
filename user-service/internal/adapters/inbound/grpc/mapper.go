@@ -66,7 +66,7 @@ func toGetUserProfileResponse(r profile.GetUserProfileResult) *user.GetUserProfi
 	}
 }
 
-func toUpdateProfileResponse(r profile.UpdateProfileResult) *user.UpdateProfileResponse {
+func toUpdateProfileResponse(r *profile.UpdateProfileResult) *user.UpdateProfileResponse {
 	return &user.UpdateProfileResponse{
 		UserId:    r.UserID,
 		Email:     r.Email,

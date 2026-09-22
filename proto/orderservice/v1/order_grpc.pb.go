@@ -54,8 +54,10 @@ type OrderServiceClient interface {
 	// GetOrder returns a single order by ID. Only the order's owner may
 	// fetch it; returns PermissionDenied for any other caller.
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*GetOrderResponse, error)
-	// ListOrders returns all orders belonging to the authenticated caller,
-	// optionally filtered by status. Not paginated.
+	// ListOrders returns orders belonging to the authenticated caller,
+	// optionally filtered by status, using keyset (cursor) pagination via
+	// page_size/page_token — not offset-based, so results stay stable and
+	// fast even as new orders are created between page fetches.
 	ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
 	// CancelOrder moves an open order to ORDER_STATUS_CANCELLED. Only the
 	// order's owner may cancel it. Cancelling an already-cancelled order is
@@ -136,8 +138,10 @@ type OrderServiceServer interface {
 	// GetOrder returns a single order by ID. Only the order's owner may
 	// fetch it; returns PermissionDenied for any other caller.
 	GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error)
-	// ListOrders returns all orders belonging to the authenticated caller,
-	// optionally filtered by status. Not paginated.
+	// ListOrders returns orders belonging to the authenticated caller,
+	// optionally filtered by status, using keyset (cursor) pagination via
+	// page_size/page_token — not offset-based, so results stay stable and
+	// fast even as new orders are created between page fetches.
 	ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error)
 	// CancelOrder moves an open order to ORDER_STATUS_CANCELLED. Only the
 	// order's owner may cancel it. Cancelling an already-cancelled order is

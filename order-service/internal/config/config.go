@@ -19,9 +19,14 @@ type Config struct {
 
 	GRPCAddr string
 
-	UserServiceAddr string
+	UserServiceAddr    string
+	UserServiceTimeout time.Duration
 
 	LogConfig logger.LoggerConfig
+
+	ShutdownTimeout time.Duration
+
+	DefaultPageSize int
 }
 
 func Load() *Config {
@@ -40,8 +45,13 @@ func Load() *Config {
 
 		GRPCAddr: getGRPCAddr(),
 
-		UserServiceAddr: getUserServiceAddr(),
+		UserServiceAddr:    getUserServiceAddr(),
+		UserServiceTimeout: getUserServiceTimeout(),
 
 		LogConfig: getLogConfig(),
+
+		ShutdownTimeout: getShutdownTimeout(),
+
+		DefaultPageSize: getDefaultPageSize(),
 	}
 }

@@ -37,6 +37,8 @@ type Config struct {
 
 	GRPCAddr string
 
+	ShutdownTimeout time.Duration
+
 	LogConfig logger.LoggerConfig
 
 	RateLimitConfig RateLimitConfig
@@ -70,6 +72,8 @@ func Load() *Config {
 		GRPCAddr: getGRPCAddr(),
 
 		LogConfig: getLogConfig(),
+
+		ShutdownTimeout: getShutdownTimeout(),
 
 		RateLimitConfig: RateLimitConfig{
 			BaseDelay: getRateLimitBaseDelay(),

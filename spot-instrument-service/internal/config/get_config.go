@@ -104,6 +104,10 @@ func getUserServiceAddr() string {
 	return mustGetEnv("USER_SERVICE_ADDR")
 }
 
+func getUserServiceTimeout() time.Duration {
+	return getEnvDuration("USER_SERVICE_TIMEOUT", 5*time.Second)
+}
+
 // --- Logger ---
 
 func getLogConfig() logger.LoggerConfig {
@@ -119,4 +123,8 @@ func getLogConfig() logger.LoggerConfig {
 		FileMaxBackups: getEnvInt("LOG_FILE_MAX_BACKUPS", 5),
 		FileMaxAgeDays: getEnvInt("LOG_FILE_MAX_AGE_DAYS", 30),
 	}
+}
+
+func getShutdownTimeout() time.Duration {
+	return getEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
 }

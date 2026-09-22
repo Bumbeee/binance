@@ -3,7 +3,6 @@ package order
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -17,19 +16,6 @@ type CreateOrderCase struct {
 
 func NewCreateOrderCase(repo ports.OrderRepository) *CreateOrderCase {
 	return &CreateOrderCase{repo: repo}
-}
-
-type OrderResult struct {
-	ID           string
-	UserID       string
-	InstrumentID string
-	Side         string
-	Type         string
-	Price        string
-	Quantity     string
-	Status       string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
 }
 
 func (uc *CreateOrderCase) Execute(
@@ -60,9 +46,10 @@ func (uc *CreateOrderCase) Execute(
 		return nil, err
 	}
 
-	if err := uc.repo.Save(ctx, o); err != nil {
+	result, err := uc.repo.SaveAndMatch(ctx, o)
+	if err != nil {
 		return nil, err
 	}
 
-	return toResult(o), nil
+	return toResult(result.Order), nil
 }

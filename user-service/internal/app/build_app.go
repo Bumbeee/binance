@@ -28,8 +28,6 @@ import (
 	"userservice/internal/core/services/token"
 )
 
-const shutdownTimeout = 10 * time.Second
-
 func BuildApp() {
 	cfg := config.Load()
 
@@ -45,8 +43,8 @@ func BuildApp() {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}
 
-	redisClient := redis.NewRedisClient(cfg.RedisConfig)
-	if err := redisClient.Ping(ctx).Err(); err != nil {
+	redisClient, err := redis.NewRedisClient(ctx, log, cfg.RedisConfig)
+	if err != nil {
 		log.Fatal("failed to connect to redis", zap.Error(err))
 	}
 
@@ -143,7 +141,7 @@ func BuildApp() {
 	select {
 	case <-stopped:
 		log.Info("grpc server stopped gracefully")
-	case <-time.After(shutdownTimeout):
+	case <-time.After(cfg.ShutdownTimeout):
 		log.Warn("graceful shutdown timed out, forcing stop")
 		grpcServer.Stop()
 	}

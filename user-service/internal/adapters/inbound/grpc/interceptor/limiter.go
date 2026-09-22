@@ -110,7 +110,14 @@ func (l *Limiter) computeDelay(fails int64) time.Duration {
 }
 
 func extractIP(ctx context.Context) (string, error) {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		if realIPs := md.Get("x-real-ip"); len(realIPs) > 0 {
+			if ip := strings.TrimSpace(realIPs[0]); ip != "" {
+				return ip, nil
+			}
+		}
+
 		if forwarded := md.Get("x-forwarded-for"); len(forwarded) > 0 {
 			ips := strings.Split(forwarded[0], ",")
 			if ip := strings.TrimSpace(ips[0]); ip != "" {

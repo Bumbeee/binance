@@ -33,8 +33,10 @@ service OrderService {
   // fetch it; returns PermissionDenied for any other caller.
   rpc GetOrder (GetOrderRequest) returns (GetOrderResponse) {}
 
-  // ListOrders returns all orders belonging to the authenticated caller,
-  // optionally filtered by status. Not paginated.
+  // ListOrders returns orders belonging to the authenticated caller,
+  // optionally filtered by status, using keyset (cursor) pagination via
+  // page_size/page_token — not offset-based, so results stay stable and
+  // fast even as new orders are created between page fetches.
   rpc ListOrders (ListOrdersRequest) returns (ListOrdersResponse) {}
 
   // CancelOrder moves an open order to ORDER_STATUS_CANCELLED. Only the
@@ -69,6 +71,8 @@ enum OrderStatus {
   ORDER_STATUS_UNSPECIFIED = 0;
   ORDER_STATUS_OPEN = 1;
   ORDER_STATUS_CANCELLED = 2;
+  ORDER_STATUS_PARTIALLY_FILLED = 3;
+  ORDER_STATUS_FILLED = 4;
 }
 
 // Order represents a single order placed by a user.
@@ -88,6 +92,7 @@ message Order {
   OrderStatus status = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  string remaining_quantity = 11;
 }
 
 message CreateOrderRequest {
@@ -116,10 +121,19 @@ message ListOrdersRequest {
   // status_filter restricts the result to orders with this status. Unset
   // returns orders of every status.
   optional OrderStatus status_filter = 1;
+  // page_size is the maximum number of orders to return. Defaults to 20
+  // if unset or zero; capped at 100.
+  int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  // page_token, if present, continues a previous ListOrders call. Opaque:
+  // callers must not construct or parse it themselves, only pass back
+  // what a prior response returned in next_page_token.
+  string page_token = 3;
 }
 
 message ListOrdersResponse {
   repeated Order orders = 1;
+  // next_page_token is empty when there are no more results.
+  string next_page_token = 2;
 }
 
 message CancelOrderRequest {

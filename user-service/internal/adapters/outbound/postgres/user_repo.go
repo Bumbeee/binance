@@ -46,7 +46,7 @@ func (repo *pgxRepository) Save(ctx context.Context, user *domain.User) error {
 
 func (repo *pgxRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, role, created_at
+		SELECT id, email, password_hash, role, created_at, first_name, last_name
 		FROM users
 		WHERE email = $1
 	`
@@ -57,10 +57,12 @@ func (repo *pgxRepository) GetByEmail(ctx context.Context, email string) (*domai
 		passwordHash string
 		role         string
 		createdAt    time.Time
+		firstName    string
+		lastName     string
 	)
 
 	err := repo.pool.QueryRow(ctx, query, email).
-		Scan(&id, &emailValue, &passwordHash, &role, &createdAt)
+		Scan(&id, &emailValue, &passwordHash, &role, &createdAt, &firstName, &lastName)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrUserNotFound
@@ -69,12 +71,12 @@ func (repo *pgxRepository) GetByEmail(ctx context.Context, email string) (*domai
 		return nil, fmt.Errorf("user_repo.GetByEmail: %w", err)
 	}
 
-	return rowToUser(id, emailValue, passwordHash, role, createdAt), nil
+	return rowToUser(id, emailValue, passwordHash, role, firstName, lastName, createdAt), nil
 }
 
 func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, role, created_at
+		SELECT id, email, password_hash, role, created_at, first_name, last_name
 		FROM users
 		WHERE id = $1
 	`
@@ -85,10 +87,12 @@ func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.Use
 		passwordHash string
 		role         string
 		createdAt    time.Time
+		firstName    string
+		lastName     string
 	)
 
 	err := repo.pool.QueryRow(ctx, query, id).
-		Scan(&userID, &emailValue, &passwordHash, &role, &createdAt)
+		Scan(&userID, &emailValue, &passwordHash, &role, &createdAt, &firstName, &lastName)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrUserNotFound
@@ -97,15 +101,17 @@ func (repo *pgxRepository) FindByID(ctx context.Context, id string) (*domain.Use
 		return nil, fmt.Errorf("user_repo.FindByID: %w", err)
 	}
 
-	return rowToUser(userID, emailValue, passwordHash, role, createdAt), nil
+	return rowToUser(userID, emailValue, passwordHash, role, firstName, lastName, createdAt), nil
 }
 
-func rowToUser(id uuid.UUID, email, passwordHash, role string, createdAt time.Time) *domain.User {
+func rowToUser(id uuid.UUID, email, passwordHash, role, firstName, lastName string, createdAt time.Time) *domain.User {
 	return &domain.User{
 		ID:           id,
 		Email:        email,
 		PasswordHash: passwordHash,
 		Role:         domain.Role(role),
+		FirstName:    firstName,
+		LastName:     lastName,
 		CreatedAt:    createdAt,
 	}
 }
@@ -123,21 +129,34 @@ func (repo *pgxRepository) UpdatePasswordHash(ctx context.Context, userID, newPa
 	return nil
 }
 
-func (repo *pgxRepository) UpdateProfile(ctx context.Context, userID string, firstName, lastName *string) error {
+func (repo *pgxRepository) UpdateProfile(ctx context.Context, userID string, firstName, lastName *string) (*domain.User, error) {
 	query := `
 		UPDATE users
 		SET first_name = COALESCE($1, first_name),
 		    last_name  = COALESCE($2, last_name)
 		WHERE id = $3
+		RETURNING id, email, password_hash, role, created_at, first_name, last_name
 	`
 
-	tag, err := repo.pool.Exec(ctx, query, firstName, lastName, userID)
-	if err != nil {
-		return fmt.Errorf("user_repo.UpdateProfile: %w", err)
+	var (
+		id           uuid.UUID
+		email        string
+		passwordHash string
+		role         string
+		createdAt    time.Time
+		newFirstName string
+		newLastName  string
+	)
+
+	err := repo.pool.QueryRow(ctx, query, firstName, lastName, userID).
+		Scan(&id, &email, &passwordHash, &role, &createdAt, &newFirstName, &newLastName)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrUserNotFound
 	}
-	if tag.RowsAffected() == 0 {
-		return domain.ErrUserNotFound
+	if err != nil {
+		return nil, fmt.Errorf("user_repo.UpdateProfile: %w", err)
 	}
 
-	return nil
+	return rowToUser(id, email, passwordHash, role, newFirstName, newLastName, createdAt), nil
 }

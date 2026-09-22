@@ -17,6 +17,13 @@ func (s OrderSide) IsValid() bool {
 	return s == OrderSideBuy || s == OrderSideSell
 }
 
+func (s OrderSide) Opposite() OrderSide {
+	if s == OrderSideBuy {
+		return OrderSideSell
+	}
+	return OrderSideBuy
+}
+
 type OrderType string
 
 const (
@@ -31,21 +38,28 @@ func (t OrderType) IsValid() bool {
 type OrderStatus string
 
 const (
-	OrderStatusOpen      OrderStatus = "open"
-	OrderStatusCancelled OrderStatus = "cancelled"
+	OrderStatusOpen            OrderStatus = "open"
+	OrderStatusPartiallyFilled OrderStatus = "partially_filled"
+	OrderStatusFilled          OrderStatus = "filled"
+	OrderStatusCancelled       OrderStatus = "cancelled"
 )
 
+func (s OrderStatus) IsTerminal() bool {
+	return s == OrderStatusFilled || s == OrderStatusCancelled
+}
+
 type Order struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	InstrumentID uuid.UUID
-	Side         OrderSide
-	Type         OrderType
-	Price        string
-	Quantity     string
-	Status       OrderStatus
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	InstrumentID      uuid.UUID
+	Side              OrderSide
+	Type              OrderType
+	Price             string // empty for market orders
+	Quantity          string
+	RemainingQuantity string
+	Status            OrderStatus
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 func NewOrder(userID, instrumentID uuid.UUID, side OrderSide, orderType OrderType, price, quantity string) (*Order, error) {
@@ -70,23 +84,26 @@ func NewOrder(userID, instrumentID uuid.UUID, side OrderSide, orderType OrderTyp
 		}
 	}
 
+	now := time.Now()
+
 	return &Order{
-		ID:           uuid.New(),
-		UserID:       userID,
-		InstrumentID: instrumentID,
-		Side:         side,
-		Type:         orderType,
-		Price:        price,
-		Quantity:     quantity,
-		Status:       OrderStatusOpen,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:                uuid.New(),
+		UserID:            userID,
+		InstrumentID:      instrumentID,
+		Side:              side,
+		Type:              orderType,
+		Price:             price,
+		Quantity:          quantity,
+		RemainingQuantity: quantity,
+		Status:            OrderStatusOpen,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}, nil
 }
 
 func (o *Order) Cancel() error {
-	if o.Status == OrderStatusCancelled {
-		return ErrOrderAlreadyCancelled
+	if o.Status.IsTerminal() {
+		return ErrOrderAlreadyTerminal
 	}
 	o.Status = OrderStatusCancelled
 	o.UpdatedAt = time.Now()

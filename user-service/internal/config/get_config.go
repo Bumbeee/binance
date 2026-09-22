@@ -201,3 +201,7 @@ func getRateLimitMaxDelay() time.Duration {
 func getRateLimitFailTTL() time.Duration {
 	return getEnvDuration("RATE_LIMIT_FAIL_TTL", time.Hour)
 }
+
+func getShutdownTimeout() time.Duration {
+	return getEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
+}

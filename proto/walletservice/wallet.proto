@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+// Package walletservice.v1 defines the public gRPC contract for
+// WalletService: user balances and the reserve/settle primitives that back
+// order placement and trade execution.
+//
+// This contract is defined ahead of the implementation, as a dependency
+// that OrderService's future matching engine will call into. See the
+// per-RPC comments below for the open design question this raises around
+// service-to-service authentication.
+package walletservice.v1;
+
+option go_package = "walletservice/v1;walletv1";
+
+import "buf/validate/validate.proto";
+
+// WalletService manages per-user, per-asset balances.
+//
+// GetBalance/ListBalances/Deposit are called with a normal user access
+// token, validated against UserService.ValidateToken exactly like
+// SpotInstrumentService/OrderService already do.
+//
+// Reserve/ReleaseReservation/SettleReservation/Credit are different: they
+// are not actions a user takes directly, but internal calls OrderService
+// (and, later, its matching engine) makes on a user's behalf while
+// processing an order or executing a trade — including at match time,
+// which happens asynchronously, outside the lifetime of any single user
+// request. Forwarding the original user's access token does not fit this
+// pattern. These four RPCs will need a service-to-service credential
+// (e.g. a machine account / mTLS) distinct from user JWTs — deliberately
+// left as an open question until the calling side (OrderService's
+// matching engine) is implemented, rather than guessed at here.
+service WalletService {
+  // GetBalance returns the caller's own balance for a single asset. A
+  // balance that has never been touched (no deposits, no orders) is not
+  // an error: it returns available="0", reserved="0".
+  rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse) {}
+
+  // ListBalances returns the caller's own balances for every asset they
+  // hold a nonzero available or reserved amount in.
+  rpc ListBalances (ListBalancesRequest) returns (ListBalancesResponse) {}
+
+  // Deposit credits available funds to a user's balance. There is no
+  // external funding source (bank transfer, blockchain deposit) wired
+  // into this system, so this is currently the only way funds enter it.
+  // Requires ROLE_ADMIN.
+  rpc Deposit (DepositRequest) returns (DepositResponse) {}
+
+  // Reserve moves amount from available to reserved for the given asset.
+  // Called when a limit order is placed, to lock the funds it could
+  // consume. Returns FailedPrecondition if available funds are
+  // insufficient.
+  rpc Reserve (ReserveRequest) returns (ReserveResponse) {}
+
+  // ReleaseReservation moves the remaining reserved amount for a
+  // reservation back to available. Called when an order is cancelled, or
+  // expires with a partially- or wholly-unfilled remainder.
+  rpc ReleaseReservation (ReleaseReservationRequest) returns (ReleaseReservationResponse) {}
+
+  // SettleReservation permanently debits amount from a reservation.
+  // Called by the matching engine when a trade executes against the
+  // reserved order. amount may be less than what remains reserved, for a
+  // partial fill — the untouched remainder stays reserved for later
+  // fills or eventual release.
+  rpc SettleReservation (SettleReservationRequest) returns (SettleReservationResponse) {}
+
+  // Credit adds amount directly to available funds. Called by the
+  // matching engine for the counterparty side of a trade — the asset an
+  // order was buying, which was never reserved on this side since it's
+  // being received, not spent.
+  rpc Credit (CreditRequest) returns (CreditResponse) {}
+}
+
+// Balance is a user's holdings of a single asset, split into funds free
+// to use (available) and funds locked under open orders (reserved).
+// Both fields are decimal strings, not double, for the same reason as
+// every other monetary field in this system: to avoid floating-point
+// rounding on values that represent real money.
+message Balance {
+  string user_id = 1;
+  string asset = 2;
+  string available = 3;
+  string reserved = 4;
+}
+
+// Reservation represents funds locked by a single Reserve call. Returned
+// so the caller (OrderService) can later reference it in
+// ReleaseReservation/SettleReservation without needing to reconstruct
+// which wallet call backed a given order.
+message Reservation {
+  string id = 1;
+  string user_id = 2;
+  string asset = 3;
+  string amount = 4;
+  // reference_id ties this reservation back to the order that caused it,
+  // for auditability. Opaque to WalletService itself.
+  string reference_id = 5;
+}
+
+message GetBalanceRequest {
+  string asset = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetBalanceResponse {
+  Balance balance = 1;
+}
+
+message ListBalancesRequest {}
+
+message ListBalancesResponse {
+  repeated Balance balances = 1;
+}
+
+message DepositRequest {
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  string asset = 2 [(buf.validate.field).string.min_len = 1];
+  string amount = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message DepositResponse {
+  Balance balance = 1;
+}
+
+message ReserveRequest {
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  string asset = 2 [(buf.validate.field).string.min_len = 1];
+  string amount = 3 [(buf.validate.field).string.min_len = 1];
+  string reference_id = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message ReserveResponse {
+  Reservation reservation = 1;
+}
+
+message ReleaseReservationRequest {
+  string reservation_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ReleaseReservationResponse {
+  Balance balance = 1;
+}
+
+message SettleReservationRequest {
+  string reservation_id = 1 [(buf.validate.field).string.uuid = true];
+  string amount = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message SettleReservationResponse {
+  Balance balance = 1;
+}
+
+message CreditRequest {
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  string asset = 2 [(buf.validate.field).string.min_len = 1];
+  string amount = 3 [(buf.validate.field).string.min_len = 1];
+  string reference_id = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message CreditResponse {
+  Balance balance = 1;
+}

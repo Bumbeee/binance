@@ -58,6 +58,10 @@ func toProtoStatus(s string) orderv1.OrderStatus {
 		return orderv1.OrderStatus_ORDER_STATUS_OPEN
 	case "cancelled":
 		return orderv1.OrderStatus_ORDER_STATUS_CANCELLED
+	case "partially_filled":
+		return orderv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED
+	case "filled":
+		return orderv1.OrderStatus_ORDER_STATUS_FILLED
 	default:
 		return orderv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	}
@@ -69,6 +73,10 @@ func fromProtoStatus(s orderv1.OrderStatus) domain.OrderStatus {
 		return domain.OrderStatusOpen
 	case orderv1.OrderStatus_ORDER_STATUS_CANCELLED:
 		return domain.OrderStatusCancelled
+	case orderv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
+		return domain.OrderStatusPartiallyFilled
+	case orderv1.OrderStatus_ORDER_STATUS_FILLED:
+		return domain.OrderStatusFilled
 	default:
 		return ""
 	}
@@ -76,16 +84,17 @@ func fromProtoStatus(s orderv1.OrderStatus) domain.OrderStatus {
 
 func toProtoOrder(r *order.OrderResult) *orderv1.Order {
 	return &orderv1.Order{
-		Id:           r.ID,
-		UserId:       r.UserID,
-		InstrumentId: r.InstrumentID,
-		Side:         toProtoSide(r.Side),
-		Type:         toProtoType(r.Type),
-		Price:        r.Price,
-		Quantity:     r.Quantity,
-		Status:       toProtoStatus(r.Status),
-		CreatedAt:    timestamppb.New(r.CreatedAt),
-		UpdatedAt:    timestamppb.New(r.UpdatedAt),
+		Id:                r.ID,
+		UserId:            r.UserID,
+		InstrumentId:      r.InstrumentID,
+		Side:              toProtoSide(r.Side),
+		Type:              toProtoType(r.Type),
+		Price:             r.Price,
+		Quantity:          r.Quantity,
+		RemainingQuantity: r.RemainingQuantity,
+		Status:            toProtoStatus(r.Status),
+		CreatedAt:         timestamppb.New(r.CreatedAt),
+		UpdatedAt:         timestamppb.New(r.UpdatedAt),
 	}
 }
 
@@ -97,12 +106,15 @@ func toGetOrderResponse(r *order.OrderResult) *orderv1.GetOrderResponse {
 	return &orderv1.GetOrderResponse{Order: toProtoOrder(r)}
 }
 
-func toListOrdersResponse(results []*order.OrderResult) *orderv1.ListOrdersResponse {
-	orders := make([]*orderv1.Order, 0, len(results))
-	for _, r := range results {
-		orders = append(orders, toProtoOrder(r))
+func toListOrdersResponse(r *order.ListOrdersResult) *orderv1.ListOrdersResponse {
+	orders := make([]*orderv1.Order, 0, len(r.Orders))
+	for _, res := range r.Orders {
+		orders = append(orders, toProtoOrder(res))
 	}
-	return &orderv1.ListOrdersResponse{Orders: orders}
+	return &orderv1.ListOrdersResponse{
+		Orders:        orders,
+		NextPageToken: r.NextPageToken,
+	}
 }
 
 func toCancelOrderResponse(r *order.OrderResult) *orderv1.CancelOrderResponse {

@@ -127,9 +127,6 @@ func (r *pgxInstrumentRepository) List(ctx context.Context, statusFilter *domain
 	return instruments, nil
 }
 
-// UpdateRate persists the new rate and returns the updated instrument in a
-// single round trip via UPDATE ... RETURNING, rather than a separate
-// UPDATE followed by a GetByID.
 func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate string) (*domain.Instrument, error) {
 	query := `
 		UPDATE instruments
@@ -141,7 +138,7 @@ func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate strin
 		          created_at, updated_at
 	`
 
-	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, rate, time.Now(), id))
+	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, rate, time.Now(), id)) // TODO: replace time.Now() with time from domain.instrument as it's already created
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrInstrumentNotFound
 	}
