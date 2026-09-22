@@ -54,7 +54,7 @@ func ValidatePassword(password string, req PasswordRequirements) ValidationResul
 	}
 
 	if req.RequireUpper && !hasUpper {
-		result.addError(ErrMsgPasswordRequireUpper) // TODO: return common error like InvalidPassword instread of specifying
+		result.addError(ErrMsgPasswordRequireUpper) // TODO: return common error like InvalidPassword instread of specifying // маппится дальше для логгинга(нужно ли все равно убрать?)
 	}
 	if req.RequireLower && !hasLower {
 		result.addError(ErrMsgPasswordRequireLower)
