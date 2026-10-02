@@ -33,8 +33,21 @@ func toLoginResponse(l *auth.LoginResult) *user.LoginResponse {
 
 func toValidateTokenResponse(vt *token.ValidateTokenResult) *user.ValidateTokenResponse {
 	return &user.ValidateTokenResponse{
-		Valid:  vt.Valid,
-		UserId: vt.UserID,
+		Valid:         vt.Valid,
+		UserId:        vt.UserID,
+		Role:          toProtoRole(string(vt.Role)),
+		InvalidReason: toProtoInvalidReason(vt.Reason),
+	}
+}
+
+func toProtoInvalidReason(r token.InvalidReason) user.InvalidReason {
+	switch r {
+	case token.InvalidReasonExpired:
+		return user.InvalidReason_INVALID_REASON_EXPIRED
+	case token.InvalidReasonMalformed:
+		return user.InvalidReason_INVALID_REASON_MALFORMED
+	default:
+		return user.InvalidReason_INVALID_REASON_UNSPECIFIED
 	}
 }
 

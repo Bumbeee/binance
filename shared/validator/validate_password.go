@@ -7,7 +7,7 @@ import (
 
 type PasswordRequirements struct {
 	MinLength      int
-	MaxLength      int // 0 = no limit
+	MaxLength      int
 	RequireUpper   bool
 	RequireLower   bool
 	RequireDigit   bool
@@ -54,7 +54,7 @@ func ValidatePassword(password string, req PasswordRequirements) ValidationResul
 	}
 
 	if req.RequireUpper && !hasUpper {
-		result.addError(ErrMsgPasswordRequireUpper) // TODO: return common error like InvalidPassword instread of specifying // маппится дальше для логгинга(нужно ли все равно убрать?)
+		result.addError(ErrMsgPasswordRequireUpper)
 	}
 	if req.RequireLower && !hasLower {
 		result.addError(ErrMsgPasswordRequireLower)

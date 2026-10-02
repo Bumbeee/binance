@@ -11,8 +11,8 @@ type User struct {
 	ID           uuid.UUID
 	Email        string
 	PasswordHash string
-	FirstName    string
-	LastName     string
+	FirstName    string // maxlen = 32
+	LastName     string // maxlen = 32
 	Role         Role
 	CreatedAt    time.Time
 }

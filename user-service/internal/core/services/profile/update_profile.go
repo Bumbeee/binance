@@ -26,7 +26,7 @@ type UpdateProfileResult struct {
 }
 
 func (up *UpdateProfileCase) Execute(ctx context.Context, userID string, firstName, lastName *string) (*UpdateProfileResult, error) {
-	if firstName != nil && !domain.ValidateName(*firstName) {
+	if firstName != nil && !domain.ValidateName(*firstName) { // TODO: use NULLIF instead of validateName ???
 		return nil, domain.ErrEmptyFirstName
 	}
 	if lastName != nil && !domain.ValidateName(*lastName) {

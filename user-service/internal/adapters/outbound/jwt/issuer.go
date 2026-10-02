@@ -1,10 +1,13 @@
 package jwt
 
 import (
+	"errors"
 	"time"
-	"userservice/internal/core/domain"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"userservice/internal/core/domain"
+	"userservice/internal/core/ports"
 )
 
 type Issuer struct {
@@ -39,20 +42,24 @@ func (i *Issuer) Issue(userID string, role domain.Role) (token string, expiresAt
 func (i *Issuer) Parse(tokenString string) (userID string, role domain.Role, err error) {
 	claims := &Claims{}
 
-	t, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+	t, parseErr := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrWrongSignMethod
 		}
 		return i.secret, nil
 	})
-	if err != nil {
-		return "", "", err
+
+	if parseErr != nil {
+		if errors.Is(parseErr, jwt.ErrTokenExpired) {
+			return "", "", ports.ErrTokenExpired
+		}
+		return "", "", ports.ErrMalformedToken
 	}
 	if !t.Valid {
-		return "", "", ErrInvalidToken
+		return "", "", ports.ErrMalformedToken
 	}
 	if claims.UserID == "" {
-		return "", "", ErrInvalidSubjectClaim
+		return "", "", ports.ErrMalformedToken
 	}
 
 	return claims.UserID, claims.Role, nil

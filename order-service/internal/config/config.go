@@ -10,7 +10,7 @@ import (
 
 var PanicMessage = "unable to load config"
 
-type Config struct {
+type Config struct { // TODO: check uber.go/fx - если делать, то там многа, есть резон?
 	PGDSN             string
 	PGMinConns        int
 	PGMaxConns        int
@@ -27,6 +27,9 @@ type Config struct {
 	ShutdownTimeout time.Duration
 
 	DefaultPageSize int
+
+	OTLPEndpoint       string
+	TraceSamplingRatio float64
 }
 
 func Load() *Config {
@@ -53,5 +56,8 @@ func Load() *Config {
 		ShutdownTimeout: getShutdownTimeout(),
 
 		DefaultPageSize: getDefaultPageSize(),
+
+		OTLPEndpoint:       getOTLPEndpoint(),
+		TraceSamplingRatio: getTraceSamplingRatio(),
 	}
 }

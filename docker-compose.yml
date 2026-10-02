@@ -57,6 +57,28 @@ services:
       timeout: 3s
       retries: 5
 
+  tempo:
+    image: grafana/tempo:latest
+    command: ['-config.file=/etc/tempo.yaml']
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    ports:
+      - '4317:4317' # OTLP gRPC receiver
+      - '3200:3200' # Tempo query API
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - '3000:3000'
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - tempo
+
   user-service:
     build:
       context: .
@@ -68,6 +90,7 @@ services:
       REDIS_ADDR: redis:6379
       JWT_SECRET: ${JWT_SECRET}
       GRPC_ADDR: ':50051'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'tempo:4317'
     ports:
       - '50051:50051'
     depends_on:
@@ -75,6 +98,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      tempo:
+        condition: service_started
 
   spot-instrument-service:
     build:
@@ -84,12 +109,18 @@ services:
       PG_DSN: postgres://postgres:postgres@postgres-spot:5432/spotinstrumentservice?sslmode=disable
       GRPC_ADDR: ':50052'
       USER_SERVICE_ADDR: 'user-service:50051'
+      ORDER_SERVICE_ADDR: 'order-service:50053'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'tempo:4317'
     ports:
       - '50052:50052'
     depends_on:
       postgres-spot:
         condition: service_healthy
       user-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      tempo:
         condition: service_started
 
   order-service:
@@ -100,6 +131,7 @@ services:
       PG_DSN: postgres://postgres:postgres@postgres-order:5432/orderservice?sslmode=disable
       GRPC_ADDR: ':50053'
       USER_SERVICE_ADDR: 'user-service:50051'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'tempo:4317'
     ports:
       - '50053:50053'
     depends_on:
@@ -107,8 +139,11 @@ services:
         condition: service_healthy
       user-service:
         condition: service_started
+      tempo:
+        condition: service_started
 
 volumes:
   pgdata_user:
   pgdata_spot:
   pgdata_order:
+  tempo_data:

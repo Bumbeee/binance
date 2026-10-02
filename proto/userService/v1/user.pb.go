@@ -88,6 +88,59 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 	return file_userservice_v1_user_proto_rawDescGZIP(), []int{0}
 }
 
+// InvalidReason explains why ValidateTokenResponse.valid is false. Lets
+// callers distinguish an expired token (worth retrying via RefreshToken)
+// from a malformed or tampered one (not worth retrying — the token itself
+// is bad, a new access token via refresh won't fix that).
+type InvalidReason int32
+
+const (
+	InvalidReason_INVALID_REASON_UNSPECIFIED InvalidReason = 0
+	InvalidReason_INVALID_REASON_EXPIRED     InvalidReason = 1
+	InvalidReason_INVALID_REASON_MALFORMED   InvalidReason = 2
+)
+
+// Enum value maps for InvalidReason.
+var (
+	InvalidReason_name = map[int32]string{
+		0: "INVALID_REASON_UNSPECIFIED",
+		1: "INVALID_REASON_EXPIRED",
+		2: "INVALID_REASON_MALFORMED",
+	}
+	InvalidReason_value = map[string]int32{
+		"INVALID_REASON_UNSPECIFIED": 0,
+		"INVALID_REASON_EXPIRED":     1,
+		"INVALID_REASON_MALFORMED":   2,
+	}
+)
+
+func (x InvalidReason) Enum() *InvalidReason {
+	p := new(InvalidReason)
+	*p = x
+	return p
+}
+
+func (x InvalidReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InvalidReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_userservice_v1_user_proto_enumTypes[1].Descriptor()
+}
+
+func (InvalidReason) Type() protoreflect.EnumType {
+	return &file_userservice_v1_user_proto_enumTypes[1]
+}
+
+func (x InvalidReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InvalidReason.Descriptor instead.
+func (InvalidReason) EnumDescriptor() ([]byte, []int) {
+	return file_userservice_v1_user_proto_rawDescGZIP(), []int{1}
+}
+
 // AuthToken is the pair of tokens issued on successful authentication.
 type AuthToken struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1067,9 +1120,11 @@ type ValidateTokenResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// valid is false for any invalid or expired token; user_id and role are
 	// only meaningful when valid is true.
-	Valid         bool   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
-	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Role          Role   `protobuf:"varint,3,opt,name=role,proto3,enum=userservice.v1.Role" json:"role,omitempty"`
+	Valid  bool   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	UserId string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Role   Role   `protobuf:"varint,3,opt,name=role,proto3,enum=userservice.v1.Role" json:"role,omitempty"`
+	// invalid_reason is INVALID_REASON_UNSPECIFIED when valid is true.
+	InvalidReason InvalidReason `protobuf:"varint,4,opt,name=invalid_reason,json=invalidReason,proto3,enum=userservice.v1.InvalidReason" json:"invalid_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1125,6 +1180,13 @@ func (x *ValidateTokenResponse) GetRole() Role {
 	return Role_ROLE_UNSPECIFIED
 }
 
+func (x *ValidateTokenResponse) GetInvalidReason() InvalidReason {
+	if x != nil {
+		return x.InvalidReason
+	}
+	return InvalidReason_INVALID_REASON_UNSPECIFIED
+}
+
 var File_userservice_v1_user_proto protoreflect.FileDescriptor
 
 const file_userservice_v1_user_proto_rawDesc = "" +
@@ -1174,7 +1236,7 @@ const file_userservice_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"o\n" +
 	"\x15ChangePasswordRequest\x12*\n" +
-	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\bR\voldPassword\x12*\n" +
+	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\voldPassword\x12*\n" +
 	"\fnew_password\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\bR\vnewPassword\"\x18\n" +
 	"\x16ChangePasswordResponse\"C\n" +
 	"\x13RefreshTokenRequest\x12,\n" +
@@ -1199,17 +1261,22 @@ const file_userservice_v1_user_proto_rawDesc = "" +
 	"first_name\x18\x05 \x01(\tR\tfirstName\x12\x1b\n" +
 	"\tlast_name\x18\x06 \x01(\tR\blastName\"B\n" +
 	"\x14ValidateTokenRequest\x12*\n" +
-	"\faccess_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vaccessToken\"p\n" +
+	"\faccess_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vaccessToken\"\xb6\x01\n" +
 	"\x15ValidateTokenResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12(\n" +
-	"\x04role\x18\x03 \x01(\x0e2\x14.userservice.v1.RoleR\x04role*M\n" +
+	"\x04role\x18\x03 \x01(\x0e2\x14.userservice.v1.RoleR\x04role\x12D\n" +
+	"\x0einvalid_reason\x18\x04 \x01(\x0e2\x1d.userservice.v1.InvalidReasonR\rinvalidReason*M\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tROLE_USER\x10\x01\x12\x0e\n" +
 	"\n" +
 	"ROLE_ADMIN\x10\x02\x12\x10\n" +
-	"\fROLE_PREMIUM\x10\x032\xab\x06\n" +
+	"\fROLE_PREMIUM\x10\x03*i\n" +
+	"\rInvalidReason\x12\x1e\n" +
+	"\x1aINVALID_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16INVALID_REASON_EXPIRED\x10\x01\x12\x1c\n" +
+	"\x18INVALID_REASON_MALFORMED\x10\x022\xab\x06\n" +
 	"\vUserService\x12O\n" +
 	"\bRegister\x12\x1f.userservice.v1.RegisterRequest\x1a .userservice.v1.RegisterResponse\"\x00\x12F\n" +
 	"\x05Login\x12\x1c.userservice.v1.LoginRequest\x1a\x1d.userservice.v1.LoginResponse\"\x00\x12I\n" +
@@ -1234,66 +1301,68 @@ func file_userservice_v1_user_proto_rawDescGZIP() []byte {
 	return file_userservice_v1_user_proto_rawDescData
 }
 
-var file_userservice_v1_user_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_userservice_v1_user_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_userservice_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_userservice_v1_user_proto_goTypes = []any{
 	(Role)(0),                      // 0: userservice.v1.Role
-	(*AuthToken)(nil),              // 1: userservice.v1.AuthToken
-	(*RegisterRequest)(nil),        // 2: userservice.v1.RegisterRequest
-	(*RegisterResponse)(nil),       // 3: userservice.v1.RegisterResponse
-	(*LoginRequest)(nil),           // 4: userservice.v1.LoginRequest
-	(*LoginResponse)(nil),          // 5: userservice.v1.LoginResponse
-	(*LogoutRequest)(nil),          // 6: userservice.v1.LogoutRequest
-	(*LogoutResponse)(nil),         // 7: userservice.v1.LogoutResponse
-	(*GetProfileRequest)(nil),      // 8: userservice.v1.GetProfileRequest
-	(*GetProfileResponse)(nil),     // 9: userservice.v1.GetProfileResponse
-	(*GetUserProfileRequest)(nil),  // 10: userservice.v1.GetUserProfileRequest
-	(*GetUserProfileResponse)(nil), // 11: userservice.v1.GetUserProfileResponse
-	(*ChangePasswordRequest)(nil),  // 12: userservice.v1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil), // 13: userservice.v1.ChangePasswordResponse
-	(*RefreshTokenRequest)(nil),    // 14: userservice.v1.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),   // 15: userservice.v1.RefreshTokenResponse
-	(*UpdateProfileRequest)(nil),   // 16: userservice.v1.UpdateProfileRequest
-	(*UpdateProfileResponse)(nil),  // 17: userservice.v1.UpdateProfileResponse
-	(*ValidateTokenRequest)(nil),   // 18: userservice.v1.ValidateTokenRequest
-	(*ValidateTokenResponse)(nil),  // 19: userservice.v1.ValidateTokenResponse
-	(*timestamppb.Timestamp)(nil),  // 20: google.protobuf.Timestamp
+	(InvalidReason)(0),             // 1: userservice.v1.InvalidReason
+	(*AuthToken)(nil),              // 2: userservice.v1.AuthToken
+	(*RegisterRequest)(nil),        // 3: userservice.v1.RegisterRequest
+	(*RegisterResponse)(nil),       // 4: userservice.v1.RegisterResponse
+	(*LoginRequest)(nil),           // 5: userservice.v1.LoginRequest
+	(*LoginResponse)(nil),          // 6: userservice.v1.LoginResponse
+	(*LogoutRequest)(nil),          // 7: userservice.v1.LogoutRequest
+	(*LogoutResponse)(nil),         // 8: userservice.v1.LogoutResponse
+	(*GetProfileRequest)(nil),      // 9: userservice.v1.GetProfileRequest
+	(*GetProfileResponse)(nil),     // 10: userservice.v1.GetProfileResponse
+	(*GetUserProfileRequest)(nil),  // 11: userservice.v1.GetUserProfileRequest
+	(*GetUserProfileResponse)(nil), // 12: userservice.v1.GetUserProfileResponse
+	(*ChangePasswordRequest)(nil),  // 13: userservice.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil), // 14: userservice.v1.ChangePasswordResponse
+	(*RefreshTokenRequest)(nil),    // 15: userservice.v1.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),   // 16: userservice.v1.RefreshTokenResponse
+	(*UpdateProfileRequest)(nil),   // 17: userservice.v1.UpdateProfileRequest
+	(*UpdateProfileResponse)(nil),  // 18: userservice.v1.UpdateProfileResponse
+	(*ValidateTokenRequest)(nil),   // 19: userservice.v1.ValidateTokenRequest
+	(*ValidateTokenResponse)(nil),  // 20: userservice.v1.ValidateTokenResponse
+	(*timestamppb.Timestamp)(nil),  // 21: google.protobuf.Timestamp
 }
 var file_userservice_v1_user_proto_depIdxs = []int32{
-	20, // 0: userservice.v1.AuthToken.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 1: userservice.v1.RegisterResponse.auth_token:type_name -> userservice.v1.AuthToken
-	1,  // 2: userservice.v1.LoginResponse.auth_token:type_name -> userservice.v1.AuthToken
+	21, // 0: userservice.v1.AuthToken.expires_at:type_name -> google.protobuf.Timestamp
+	2,  // 1: userservice.v1.RegisterResponse.auth_token:type_name -> userservice.v1.AuthToken
+	2,  // 2: userservice.v1.LoginResponse.auth_token:type_name -> userservice.v1.AuthToken
 	0,  // 3: userservice.v1.GetProfileResponse.role:type_name -> userservice.v1.Role
-	20, // 4: userservice.v1.GetProfileResponse.created_at:type_name -> google.protobuf.Timestamp
+	21, // 4: userservice.v1.GetProfileResponse.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 5: userservice.v1.GetUserProfileResponse.role:type_name -> userservice.v1.Role
-	20, // 6: userservice.v1.GetUserProfileResponse.created_at:type_name -> google.protobuf.Timestamp
-	1,  // 7: userservice.v1.RefreshTokenResponse.auth_token:type_name -> userservice.v1.AuthToken
+	21, // 6: userservice.v1.GetUserProfileResponse.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 7: userservice.v1.RefreshTokenResponse.auth_token:type_name -> userservice.v1.AuthToken
 	0,  // 8: userservice.v1.UpdateProfileResponse.role:type_name -> userservice.v1.Role
-	20, // 9: userservice.v1.UpdateProfileResponse.created_at:type_name -> google.protobuf.Timestamp
+	21, // 9: userservice.v1.UpdateProfileResponse.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 10: userservice.v1.ValidateTokenResponse.role:type_name -> userservice.v1.Role
-	2,  // 11: userservice.v1.UserService.Register:input_type -> userservice.v1.RegisterRequest
-	4,  // 12: userservice.v1.UserService.Login:input_type -> userservice.v1.LoginRequest
-	6,  // 13: userservice.v1.UserService.Logout:input_type -> userservice.v1.LogoutRequest
-	18, // 14: userservice.v1.UserService.ValidateToken:input_type -> userservice.v1.ValidateTokenRequest
-	8,  // 15: userservice.v1.UserService.GetProfile:input_type -> userservice.v1.GetProfileRequest
-	10, // 16: userservice.v1.UserService.GetUserProfile:input_type -> userservice.v1.GetUserProfileRequest
-	16, // 17: userservice.v1.UserService.UpdateProfile:input_type -> userservice.v1.UpdateProfileRequest
-	12, // 18: userservice.v1.UserService.ChangePassword:input_type -> userservice.v1.ChangePasswordRequest
-	14, // 19: userservice.v1.UserService.RefreshToken:input_type -> userservice.v1.RefreshTokenRequest
-	3,  // 20: userservice.v1.UserService.Register:output_type -> userservice.v1.RegisterResponse
-	5,  // 21: userservice.v1.UserService.Login:output_type -> userservice.v1.LoginResponse
-	7,  // 22: userservice.v1.UserService.Logout:output_type -> userservice.v1.LogoutResponse
-	19, // 23: userservice.v1.UserService.ValidateToken:output_type -> userservice.v1.ValidateTokenResponse
-	9,  // 24: userservice.v1.UserService.GetProfile:output_type -> userservice.v1.GetProfileResponse
-	11, // 25: userservice.v1.UserService.GetUserProfile:output_type -> userservice.v1.GetUserProfileResponse
-	17, // 26: userservice.v1.UserService.UpdateProfile:output_type -> userservice.v1.UpdateProfileResponse
-	13, // 27: userservice.v1.UserService.ChangePassword:output_type -> userservice.v1.ChangePasswordResponse
-	15, // 28: userservice.v1.UserService.RefreshToken:output_type -> userservice.v1.RefreshTokenResponse
-	20, // [20:29] is the sub-list for method output_type
-	11, // [11:20] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	1,  // 11: userservice.v1.ValidateTokenResponse.invalid_reason:type_name -> userservice.v1.InvalidReason
+	3,  // 12: userservice.v1.UserService.Register:input_type -> userservice.v1.RegisterRequest
+	5,  // 13: userservice.v1.UserService.Login:input_type -> userservice.v1.LoginRequest
+	7,  // 14: userservice.v1.UserService.Logout:input_type -> userservice.v1.LogoutRequest
+	19, // 15: userservice.v1.UserService.ValidateToken:input_type -> userservice.v1.ValidateTokenRequest
+	9,  // 16: userservice.v1.UserService.GetProfile:input_type -> userservice.v1.GetProfileRequest
+	11, // 17: userservice.v1.UserService.GetUserProfile:input_type -> userservice.v1.GetUserProfileRequest
+	17, // 18: userservice.v1.UserService.UpdateProfile:input_type -> userservice.v1.UpdateProfileRequest
+	13, // 19: userservice.v1.UserService.ChangePassword:input_type -> userservice.v1.ChangePasswordRequest
+	15, // 20: userservice.v1.UserService.RefreshToken:input_type -> userservice.v1.RefreshTokenRequest
+	4,  // 21: userservice.v1.UserService.Register:output_type -> userservice.v1.RegisterResponse
+	6,  // 22: userservice.v1.UserService.Login:output_type -> userservice.v1.LoginResponse
+	8,  // 23: userservice.v1.UserService.Logout:output_type -> userservice.v1.LogoutResponse
+	20, // 24: userservice.v1.UserService.ValidateToken:output_type -> userservice.v1.ValidateTokenResponse
+	10, // 25: userservice.v1.UserService.GetProfile:output_type -> userservice.v1.GetProfileResponse
+	12, // 26: userservice.v1.UserService.GetUserProfile:output_type -> userservice.v1.GetUserProfileResponse
+	18, // 27: userservice.v1.UserService.UpdateProfile:output_type -> userservice.v1.UpdateProfileResponse
+	14, // 28: userservice.v1.UserService.ChangePassword:output_type -> userservice.v1.ChangePasswordResponse
+	16, // 29: userservice.v1.UserService.RefreshToken:output_type -> userservice.v1.RefreshTokenResponse
+	21, // [21:30] is the sub-list for method output_type
+	12, // [12:21] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_userservice_v1_user_proto_init() }
@@ -1307,7 +1376,7 @@ func file_userservice_v1_user_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_userservice_v1_user_proto_rawDesc), len(file_userservice_v1_user_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,

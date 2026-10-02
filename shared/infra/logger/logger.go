@@ -9,7 +9,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-type LoggerConfig struct {
+type LoggerConfig struct { // TODO: унифицировать вид логов ?????
 	Level             string
 	EncodingJSON      bool
 	EncodingConsole   bool

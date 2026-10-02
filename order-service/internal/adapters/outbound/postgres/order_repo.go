@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 
@@ -21,43 +22,16 @@ type pgxOrderRepository struct {
 	pool *pgxpool.Pool
 }
 
-const defaultPageSize = 20 // в конфиг???
+const defaultPageSize = 20
 
 func NewOrderRepository(pool *pgxpool.Pool) ports.OrderRepository {
 	return &pgxOrderRepository{pool: pool}
 }
 
-func (r *pgxOrderRepository) Save(ctx context.Context, order *domain.Order) error {
-	query := `
-		INSERT INTO orders (
-			id, user_id, instrument_id, side, type,
-			price, quantity, status, created_at, updated_at
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`
-
-	var price any
-	if order.Price != "" {
-		price = order.Price
-	}
-
-	_, err := r.pool.Exec(ctx, query,
-		order.ID, order.UserID, order.InstrumentID,
-		string(order.Side), string(order.Type),
-		price, order.Quantity, string(order.Status),
-		order.CreatedAt, order.UpdatedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("order_repo.Save: %w", err)
-	}
-
-	return nil
-}
-
 func (r *pgxOrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Order, error) {
 	query := `
 		SELECT id, user_id, instrument_id, side, type,
-		       price, quantity, status, created_at, updated_at
+		       price, quantity, remaining_quantity, status, created_at, updated_at
 		FROM orders
 		WHERE id = $1
 	`
@@ -115,7 +89,7 @@ func (r *pgxOrderRepository) ListByUserID(
 	args = append(args, pageSize+1)
 	query := fmt.Sprintf(`
 		SELECT id, user_id, instrument_id, side, type,
-		       price, quantity, status, created_at, updated_at
+		       price, quantity, remaining_quantity, status, created_at, updated_at
 		FROM orders
 		WHERE %s
 		ORDER BY created_at DESC, id DESC
@@ -164,152 +138,79 @@ func (r *pgxOrderRepository) UpdateStatus(ctx context.Context, id uuid.UUID, sta
 	return nil
 }
 
-// TODO: Add List Trades(as it was added for spot-trading) to display trades for user (sillimar to ListByUserID)
-
-func (r *pgxOrderRepository) SaveAndMatch(ctx context.Context, order *domain.Order) (*ports.MatchResult, error) {
-	var result *ports.MatchResult
-
-	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		insertQuery := `
-			INSERT INTO orders (
-				id, user_id, instrument_id, side, type,
-				price, quantity, remaining_quantity, status, created_at, updated_at
-			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		`
-		var price any
-		if order.Price != "" {
-			price = order.Price
-		}
-
-		if _, err := tx.Exec(ctx, insertQuery,
-			order.ID, order.UserID, order.InstrumentID,
-			string(order.Side), string(order.Type),
-			price, order.Quantity, order.RemainingQuantity, string(order.Status),
-			order.CreatedAt, order.UpdatedAt,
-		); err != nil {
-			return fmt.Errorf("insert order: %w", err)
-		}
-
-		remaining, err := decimal.NewFromString(order.RemainingQuantity)
-		if err != nil {
-			return fmt.Errorf("parse order quantity: %w", err)
-		}
-
-		var (
-			trades  []*domain.Trade
-			peers   []*domain.Order
-			zero    = decimal.NewFromInt(0)
-			orderPx decimal.Decimal
-		)
-
-		if order.Type == domain.OrderTypeLimit {
-			orderPx, err = decimal.NewFromString(order.Price)
-			if err != nil {
-				return fmt.Errorf("parse order price: %w", err)
-			}
-		}
-
-		for remaining.GreaterThan(zero) {
-			peer, err := lockBestMatchingOrder(ctx, tx, order.InstrumentID, order.Side, order.Type, orderPx)
-			if err != nil {
-				return fmt.Errorf("lock matching order: %w", err)
-			}
-			if peer == nil {
-				break
-			}
-
-			peerRemaining, err := decimal.NewFromString(peer.RemainingQuantity)
-			if err != nil {
-				return fmt.Errorf("parse peer quantity: %w", err)
-			}
-
-			fillQty := decimal.Min(remaining, peerRemaining)
-
-			trade := &domain.Trade{
-				ID:           uuid.New(),
-				InstrumentID: order.InstrumentID,
-				Price:        peer.Price,
-				Quantity:     fillQty.String(),
-				CreatedAt:    time.Now(),
-			}
-			if order.Side == domain.OrderSideBuy {
-				trade.BuyOrderID = order.ID
-				trade.SellOrderID = peer.ID
-			} else {
-				trade.BuyOrderID = peer.ID
-				trade.SellOrderID = order.ID
-			}
-
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO trades (id, instrument_id, buy_order_id, sell_order_id, price, quantity, created_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
-			`, trade.ID, trade.InstrumentID, trade.BuyOrderID, trade.SellOrderID, trade.Price, trade.Quantity, trade.CreatedAt); err != nil {
-				return fmt.Errorf("insert trade: %w", err)
-			}
-			trades = append(trades, trade)
-
-			// TODO(wallet): once WalletService is implemented, this is
-			// where each side of the trade settles:
-			//   - SettleReservation(peer's reservation, fillQty) — debits
-			//     what the maker actually spent from their locked funds
-			//   - Credit(order.UserID, <asset received>, fillQty) and
-			//     Credit(peer.UserID, <asset received>, fillQty * trade.Price)
-			//     — the asset each side receives depends on which side
-			//     (buy/sell) it was and needs the instrument's
-			//     base/quote assets, which this repository doesn't know —
-			//     that lookup and the wallet calls belong in the
-			//     application layer once wired, not here.
-
-			remaining = remaining.Sub(fillQty)
-			peerRemaining = peerRemaining.Sub(fillQty)
-
-			peerStatus := domain.OrderStatusPartiallyFilled
-			if peerRemaining.IsZero() {
-				peerStatus = domain.OrderStatusFilled
-			}
-			if _, err := tx.Exec(ctx, `
-				UPDATE orders SET remaining_quantity = $1, status = $2, updated_at = $3 WHERE id = $4
-			`, peerRemaining.String(), string(peerStatus), time.Now(), peer.ID); err != nil {
-				return fmt.Errorf("update peer order: %w", err)
-			}
-			peer.RemainingQuantity = peerRemaining.String()
-			peer.Status = peerStatus
-			peers = append(peers, peer)
-		}
-
-		order.RemainingQuantity = remaining.String()
-		switch {
-		case remaining.IsZero():
-			order.Status = domain.OrderStatusFilled
-		case order.Type == domain.OrderTypeMarket:
-			order.Status = domain.OrderStatusCancelled
-		case remaining.LessThan(decimal.RequireFromString(order.Quantity)):
-			order.Status = domain.OrderStatusPartiallyFilled
-		default:
-			order.Status = domain.OrderStatusOpen
-		}
-		order.UpdatedAt = time.Now()
-
-		if _, err := tx.Exec(ctx, `
-			UPDATE orders SET remaining_quantity = $1, status = $2, updated_at = $3 WHERE id = $4
-		`, order.RemainingQuantity, string(order.Status), order.UpdatedAt, order.ID); err != nil {
-			return fmt.Errorf("update new order: %w", err)
-		}
-
-		result = &ports.MatchResult{Order: order, Trades: trades, AffectedPeers: peers}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("order_repo.SaveAndMatch: %w", err)
+func (r *pgxOrderRepository) FindByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error) {
+	query := `
+		SELECT id, user_id, instrument_id, side, type,
+		       price, quantity, remaining_quantity, status, created_at, updated_at
+		FROM orders
+		WHERE user_id = $1 AND idempotency_key = $2
+	`
+	order, err := scanOrder(r.pool.QueryRow(ctx, query, userID, key))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
 	}
-
-	return result, nil
+	if err != nil {
+		return nil, fmt.Errorf("order_repo.FindByIdempotencyKey: %w", err)
+	}
+	return order, nil
 }
 
-func lockBestMatchingOrder(
+func (r *pgxOrderRepository) RunMatchingTx(ctx context.Context, fn func(ports.MatchingStore) error) error {
+	return pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		return fn(&txMatchingStore{tx: tx})
+	})
+}
+
+type txMatchingStore struct {
+	tx pgx.Tx
+}
+
+func (s *txMatchingStore) InsertOrder(ctx context.Context, order *domain.Order) error {
+	insertQuery := `
+		INSERT INTO orders (
+			id, user_id, instrument_id, side, type,
+			price, quantity, remaining_quantity, status, idempotency_key,
+			created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`
+	var price any
+	if order.Price != "" {
+		price = order.Price
+	}
+	var idempotencyKey any
+	if order.IdempotencyKey != "" {
+		idempotencyKey = order.IdempotencyKey
+	}
+
+	if _, err := s.tx.Exec(ctx, insertQuery,
+		order.ID, order.UserID, order.InstrumentID,
+		string(order.Side), string(order.Type),
+		price, order.Quantity, order.RemainingQuantity, string(order.Status), idempotencyKey,
+		order.CreatedAt, order.UpdatedAt,
+	); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_orders_user_idempotency" {
+			return ports.ErrDuplicateIdempotencyKey
+		}
+		return fmt.Errorf("insert order: %w", err)
+	}
+
+	return nil
+}
+
+func (s *txMatchingStore) FindByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error) {
+	query := `
+		SELECT id, user_id, instrument_id, side, type,
+		       price, quantity, remaining_quantity, status, created_at, updated_at
+		FROM orders
+		WHERE user_id = $1 AND idempotency_key = $2
+	`
+	return scanOrder(s.tx.QueryRow(ctx, query, userID, key))
+}
+
+func (s *txMatchingStore) LockBestMatchingOrder(
 	ctx context.Context,
-	tx pgx.Tx,
 	instrumentID uuid.UUID,
 	side domain.OrderSide,
 	orderType domain.OrderType,
@@ -346,7 +247,7 @@ func lockBestMatchingOrder(
 		FOR UPDATE SKIP LOCKED
 	`, priceFilter, priceOrder)
 
-	order, err := scanOrder(tx.QueryRow(ctx, query, args...))
+	order, err := scanOrder(s.tx.QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -355,6 +256,26 @@ func lockBestMatchingOrder(
 	}
 
 	return order, nil
+}
+
+func (s *txMatchingStore) UpdateOrderFill(ctx context.Context, orderID uuid.UUID, remainingQuantity string, status domain.OrderStatus) error {
+	_, err := s.tx.Exec(ctx, `
+		UPDATE orders SET remaining_quantity = $1, status = $2, updated_at = $3 WHERE id = $4
+	`, remainingQuantity, string(status), time.Now(), orderID)
+	if err != nil {
+		return fmt.Errorf("update order fill: %w", err)
+	}
+	return nil
+}
+
+func (s *txMatchingStore) InsertTrade(ctx context.Context, trade *domain.Trade) error {
+	if _, err := s.tx.Exec(ctx, `
+		INSERT INTO trades (id, instrument_id, buy_order_id, sell_order_id, price, quantity, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, trade.ID, trade.InstrumentID, trade.BuyOrderID, trade.SellOrderID, trade.Price, trade.Quantity, trade.CreatedAt); err != nil {
+		return fmt.Errorf("insert trade: %w", err)
+	}
+	return nil
 }
 
 func encodeCursor(createdAt time.Time, id uuid.UUID) string {
@@ -392,21 +313,22 @@ type rowScanner interface {
 
 func scanOrder(row rowScanner) (*domain.Order, error) {
 	var (
-		id           uuid.UUID
-		userID       uuid.UUID
-		instrumentID uuid.UUID
-		side         string
-		orderType    string
-		price        *string
-		quantity     string
-		status       string
-		createdAt    time.Time
-		updatedAt    time.Time
+		id                uuid.UUID
+		userID            uuid.UUID
+		instrumentID      uuid.UUID
+		side              string
+		orderType         string
+		price             *string
+		quantity          string
+		remainingQuantity string
+		status            string
+		createdAt         time.Time
+		updatedAt         time.Time
 	)
 
 	if err := row.Scan(
 		&id, &userID, &instrumentID, &side, &orderType,
-		&price, &quantity, &status, &createdAt, &updatedAt,
+		&price, &quantity, &remainingQuantity, &status, &createdAt, &updatedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -417,15 +339,16 @@ func scanOrder(row rowScanner) (*domain.Order, error) {
 	}
 
 	return &domain.Order{
-		ID:           id,
-		UserID:       userID,
-		InstrumentID: instrumentID,
-		Side:         domain.OrderSide(side),
-		Type:         domain.OrderType(orderType),
-		Price:        priceValue,
-		Quantity:     quantity,
-		Status:       domain.OrderStatus(status),
-		CreatedAt:    createdAt,
-		UpdatedAt:    updatedAt,
+		ID:                id,
+		UserID:            userID,
+		InstrumentID:      instrumentID,
+		Side:              domain.OrderSide(side),
+		Type:              domain.OrderType(orderType),
+		Price:             priceValue,
+		Quantity:          quantity,
+		RemainingQuantity: remainingQuantity,
+		Status:            domain.OrderStatus(status),
+		CreatedAt:         createdAt,
+		UpdatedAt:         updatedAt,
 	}, nil
 }

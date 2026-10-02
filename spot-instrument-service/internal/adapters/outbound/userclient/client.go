@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -17,7 +18,10 @@ type Client struct {
 }
 
 func New(addr string, timeout time.Duration) (*Client, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +44,6 @@ func (c *Client) Validate(ctx context.Context, accessToken string) (userID strin
 	resp, err := c.stub.ValidateToken(ctx, &user.ValidateTokenRequest{
 		AccessToken: accessToken,
 	})
-
 	if err != nil {
 		return "", "", false, err
 	}

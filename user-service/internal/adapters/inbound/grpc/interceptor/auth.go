@@ -67,10 +67,10 @@ func (a *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 }
 
 func UserIDFromContext(ctx context.Context) (string, bool) {
-	return tools.ValueFromContext(ctx, userIDContextKey)
+	return tools.StringFromContext(ctx, userIDContextKey)
 }
 
 func UserRoleFromContext(ctx context.Context) (domain.Role, bool) {
-	role, ok := tools.ValueFromContext(ctx, userRoleContextKey)
+	role, ok := tools.StringFromContext(ctx, userRoleContextKey)
 	return domain.Role(role), ok
 }

@@ -132,3 +132,16 @@ func getShutdownTimeout() time.Duration {
 func getDefaultPageSize() int {
 	return getEnvInt("DEFAULT_PAGE_SIZE", 20)
 }
+
+func getOTLPEndpoint() string {
+	return getEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "tempo:4317")
+}
+
+func getTraceSamplingRatio() float64 {
+	v := getEnvString("TRACE_SAMPLING_RATIO", "1.0")
+	ratio, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 1.0
+	}
+	return ratio
+}

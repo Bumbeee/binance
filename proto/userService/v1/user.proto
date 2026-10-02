@@ -155,7 +155,7 @@ message GetUserProfileResponse {
 // authenticated caller. user_id is not included: it is resolved from the
 // access token.
 message ChangePasswordRequest {
-  string old_password = 1 [(buf.validate.field).string.min_len = 8];
+  string old_password = 1 [(buf.validate.field).string.min_len = 1];
   string new_password = 2 [(buf.validate.field).string.min_len = 8];
 }
 
@@ -193,10 +193,22 @@ message ValidateTokenRequest {
   string access_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
+// InvalidReason explains why ValidateTokenResponse.valid is false. Lets
+// callers distinguish an expired token (worth retrying via RefreshToken)
+// from a malformed or tampered one (not worth retrying — the token itself
+// is bad, a new access token via refresh won't fix that).
+enum InvalidReason {
+  INVALID_REASON_UNSPECIFIED = 0;
+  INVALID_REASON_EXPIRED = 1;
+  INVALID_REASON_MALFORMED = 2;
+}
+
 message ValidateTokenResponse {
   // valid is false for any invalid or expired token; user_id and role are
   // only meaningful when valid is true.
   bool valid = 1;
   string user_id = 2;
   Role role = 3;
+  // invalid_reason is INVALID_REASON_UNSPECIFIED when valid is true.
+  InvalidReason invalid_reason = 4;
 }

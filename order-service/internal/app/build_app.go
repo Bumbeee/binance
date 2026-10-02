@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -16,14 +17,18 @@ import (
 	orderv1 "market/proto/orderservice/v1"
 	"market/shared/infra/logger"
 	"market/shared/infra/pool"
+	"market/shared/tracing"
 
 	grpcadapter "order-service/internal/adapters/inbound/grpc"
 	"order-service/internal/adapters/inbound/grpc/interceptor"
-	client "order-service/internal/adapters/outbound/client"
+	userclient "order-service/internal/adapters/outbound/client"
 	"order-service/internal/adapters/outbound/postgres"
 	"order-service/internal/config"
 	"order-service/internal/core/services/order"
+	"order-service/internal/core/services/trade"
 )
+
+const serviceName = "order-service"
 
 func BuildApp() {
 	cfg := config.Load()
@@ -37,22 +42,40 @@ func BuildApp() {
 
 	ctx := context.Background()
 
+	shutdownTracing, err := tracing.Init(ctx, tracing.Config{
+		ServiceName:   serviceName,
+		OTLPEndpoint:  cfg.OTLPEndpoint,
+		SamplingRatio: cfg.TraceSamplingRatio,
+	})
+	if err != nil {
+		log.Fatal("failed to init tracing", zap.Error(err))
+	}
+	defer func() {
+		if err := shutdownTracing(ctx); err != nil {
+			log.Error("failed to shut down tracing", zap.Error(err))
+		}
+	}()
+
 	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
 	}
 
-	userClient, err := client.New(cfg.UserServiceAddr, cfg.UserServiceTimeout)
+	userClient, err := userclient.New(cfg.UserServiceAddr, cfg.UserServiceTimeout)
 	if err != nil {
 		log.Fatal("failed to connect to user-service", zap.Error(err))
 	}
 
 	repo := postgres.NewOrderRepository(dbpool)
+	tradeRepo := postgres.NewTradeRepository(dbpool)
 
-	createOrderCase := order.NewCreateOrderCase(repo)
+	matchingEngine := order.NewMatchingEngine()
+
+	createOrderCase := order.NewCreateOrderCase(repo, matchingEngine)
 	getOrderCase := order.NewGetOrderCase(repo)
 	listOrdersCase := order.NewListOrdersCase(repo)
 	cancelOrderCase := order.NewCancelOrderCase(repo)
+	getLastTradePricesCase := trade.NewGetLastTradePricesCase(tradeRepo)
 
 	loggingInterceptor := interceptor.NewLoggingInterceptor(log)
 	authInterceptor := interceptor.NewAuthInterceptor(userClient)
@@ -62,6 +85,7 @@ func BuildApp() {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			loggingInterceptor.Unary(),
 			validationInterceptor.Unary(),
@@ -76,6 +100,7 @@ func BuildApp() {
 		getOrderCase,
 		listOrdersCase,
 		cancelOrderCase,
+		getLastTradePricesCase,
 	)
 
 	orderv1.RegisterOrderServiceServer(grpcServer, orderServer)

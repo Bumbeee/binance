@@ -4,9 +4,26 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"order-service/internal/core/domain"
 )
+
+type MatchingStore interface {
+	InsertOrder(ctx context.Context, order *domain.Order) error
+	FindByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error)
+
+	LockBestMatchingOrder(
+		ctx context.Context,
+		instrumentID uuid.UUID,
+		side domain.OrderSide,
+		orderType domain.OrderType,
+		limitPrice decimal.Decimal,
+	) (*domain.Order, error)
+
+	UpdateOrderFill(ctx context.Context, orderID uuid.UUID, remainingQuantity string, status domain.OrderStatus) error
+	InsertTrade(ctx context.Context, trade *domain.Trade) error
+}
 
 type MatchResult struct {
 	Order         *domain.Order
@@ -15,9 +32,7 @@ type MatchResult struct {
 }
 
 type OrderRepository interface {
-	Save(ctx context.Context, order *domain.Order) error
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.Order, error)
-	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.OrderStatus) error
 
 	ListByUserID(
 		ctx context.Context,
@@ -27,5 +42,7 @@ type OrderRepository interface {
 		pageToken string,
 	) (orders []*domain.Order, nextPageToken string, err error)
 
-	SaveAndMatch(ctx context.Context, order *domain.Order) (*MatchResult, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.OrderStatus) error
+	RunMatchingTx(ctx context.Context, fn func(MatchingStore) error) error
+	FindByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error)
 }

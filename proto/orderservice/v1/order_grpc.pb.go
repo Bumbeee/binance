@@ -5,9 +5,8 @@
 // source: orderservice/v1/order.proto
 
 // Package orderservice.v1 defines the public gRPC contract for
-// OrderService: placing, viewing and cancelling orders. This first version
-// has no matching engine — orders are recorded and can be cancelled, but
-// are never automatically filled against each other.
+// OrderService: placing, viewing and cancelling orders, and reading back
+// the trades a matching engine produces when orders cross.
 
 package orderv1
 
@@ -24,10 +23,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	OrderService_CreateOrder_FullMethodName = "/orderservice.v1.OrderService/CreateOrder"
-	OrderService_GetOrder_FullMethodName    = "/orderservice.v1.OrderService/GetOrder"
-	OrderService_ListOrders_FullMethodName  = "/orderservice.v1.OrderService/ListOrders"
-	OrderService_CancelOrder_FullMethodName = "/orderservice.v1.OrderService/CancelOrder"
+	OrderService_GetLastTradePrices_FullMethodName = "/orderservice.v1.OrderService/GetLastTradePrices"
+	OrderService_CreateOrder_FullMethodName        = "/orderservice.v1.OrderService/CreateOrder"
+	OrderService_GetOrder_FullMethodName           = "/orderservice.v1.OrderService/GetOrder"
+	OrderService_ListOrders_FullMethodName         = "/orderservice.v1.OrderService/ListOrders"
+	OrderService_CancelOrder_FullMethodName        = "/orderservice.v1.OrderService/CancelOrder"
+	OrderService_ListTrades_FullMethodName         = "/orderservice.v1.OrderService/ListTrades"
+	OrderService_ListOrderTrades_FullMethodName    = "/orderservice.v1.OrderService/ListOrderTrades"
 )
 
 // OrderServiceClient is the client API for OrderService service.
@@ -42,14 +44,38 @@ const (
 // Authentication is verified the same way as in SpotInstrumentService: this
 // service holds no signing secret of its own and validates every access
 // token against UserService.ValidateToken.
+//
+// Fund movement (reserving balance when an order is placed, settling it
+// on each fill) is not yet wired to WalletService — see wallet.proto and
+// the TODO markers in the matching implementation. Orders match and
+// produce trades correctly; no money actually moves yet.
 type OrderServiceClient interface {
-	// CreateOrder places a new order for the authenticated caller.
-	// instrument_id is trusted as-is and not currently verified against
-	// SpotInstrumentService (no cross-service existence check yet).
-	// price is required when type is ORDER_TYPE_LIMIT and rejected when type
-	// is ORDER_TYPE_MARKET; this is enforced by the application layer, not
-	// by proto field constraints, since it depends on the value of a sibling
-	// field.
+	// GetLastTradePrices returns the most recent trade price for each
+	// requested instrument, in one round trip — called by
+	// SpotInstrumentService's polling worker, which needs this for every
+	// active instrument on each poll, not one at a time. Instruments with
+	// no trade yet are simply omitted from the response rather than
+	// erroring; the caller can tell "no price yet" from "not in my
+	// results" without a per-instrument NotFound. Public: no access token
+	// required, same reasoning as GetInstrument — this is public market
+	// data, and this is a read of OrderService's own data, not a write
+	// into SpotInstrumentService, so there's no service-to-service
+	// authorization question to resolve (unlike wallet.proto's Reserve/
+	// Settle/Credit, which do write across the service boundary).
+	GetLastTradePrices(ctx context.Context, in *GetLastTradePricesRequest, opts ...grpc.CallOption) (*GetLastTradePricesResponse, error)
+	// CreateOrder places a new order for the authenticated caller and
+	// immediately attempts to match it against resting opposite-side orders
+	// for the same instrument (price-time priority). instrument_id is
+	// trusted as-is and not currently verified against
+	// SpotInstrumentService. price is required when type is
+	// ORDER_TYPE_LIMIT and rejected when type is ORDER_TYPE_MARKET; this is
+	// enforced by the application layer, not by proto field constraints,
+	// since it depends on the value of a sibling field.
+	//
+	// A limit order that isn't fully matched rests in the book
+	// (ORDER_STATUS_OPEN or ORDER_STATUS_PARTIALLY_FILLED). A market order
+	// never rests: any unfilled remainder is cancelled immediately rather
+	// than waiting for a price it never specified.
 	CreateOrder(ctx context.Context, in *CreateOrderRequest, opts ...grpc.CallOption) (*CreateOrderResponse, error)
 	// GetOrder returns a single order by ID. Only the order's owner may
 	// fetch it; returns PermissionDenied for any other caller.
@@ -59,11 +85,22 @@ type OrderServiceClient interface {
 	// page_size/page_token — not offset-based, so results stay stable and
 	// fast even as new orders are created between page fetches.
 	ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
-	// CancelOrder moves an open order to ORDER_STATUS_CANCELLED. Only the
-	// order's owner may cancel it. Cancelling an already-cancelled order is
-	// rejected, not treated as a no-op, so the caller can tell the two cases
-	// apart.
+	// CancelOrder moves an order to ORDER_STATUS_CANCELLED. Only the
+	// order's owner may cancel it. Rejected (FailedPrecondition) if the
+	// order is already in a terminal state (filled or cancelled) — not
+	// treated as a no-op, so the caller can tell a stale retry from a
+	// genuinely invalid request.
 	CancelOrder(ctx context.Context, in *CancelOrderRequest, opts ...grpc.CallOption) (*CancelOrderResponse, error)
+	// ListTrades returns trades the authenticated caller participated in
+	// (as either buyer or seller), across all their orders, newest first,
+	// using the same keyset pagination as ListOrders.
+	ListTrades(ctx context.Context, in *ListTradesRequest, opts ...grpc.CallOption) (*ListTradesResponse, error)
+	// ListOrderTrades returns every trade a single order participated in,
+	// oldest first (the order in which its fills actually happened). Only
+	// the order's owner may call this for a given order_id. Not paginated:
+	// the number of fills one order accumulates is naturally bounded,
+	// unlike a user's whole trade history.
+	ListOrderTrades(ctx context.Context, in *ListOrderTradesRequest, opts ...grpc.CallOption) (*ListOrderTradesResponse, error)
 }
 
 type orderServiceClient struct {
@@ -72,6 +109,16 @@ type orderServiceClient struct {
 
 func NewOrderServiceClient(cc grpc.ClientConnInterface) OrderServiceClient {
 	return &orderServiceClient{cc}
+}
+
+func (c *orderServiceClient) GetLastTradePrices(ctx context.Context, in *GetLastTradePricesRequest, opts ...grpc.CallOption) (*GetLastTradePricesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLastTradePricesResponse)
+	err := c.cc.Invoke(ctx, OrderService_GetLastTradePrices_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *orderServiceClient) CreateOrder(ctx context.Context, in *CreateOrderRequest, opts ...grpc.CallOption) (*CreateOrderResponse, error) {
@@ -114,6 +161,26 @@ func (c *orderServiceClient) CancelOrder(ctx context.Context, in *CancelOrderReq
 	return out, nil
 }
 
+func (c *orderServiceClient) ListTrades(ctx context.Context, in *ListTradesRequest, opts ...grpc.CallOption) (*ListTradesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTradesResponse)
+	err := c.cc.Invoke(ctx, OrderService_ListTrades_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderServiceClient) ListOrderTrades(ctx context.Context, in *ListOrderTradesRequest, opts ...grpc.CallOption) (*ListOrderTradesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrderTradesResponse)
+	err := c.cc.Invoke(ctx, OrderService_ListOrderTrades_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrderServiceServer is the server API for OrderService service.
 // All implementations must embed UnimplementedOrderServiceServer
 // for forward compatibility.
@@ -126,14 +193,38 @@ func (c *orderServiceClient) CancelOrder(ctx context.Context, in *CancelOrderReq
 // Authentication is verified the same way as in SpotInstrumentService: this
 // service holds no signing secret of its own and validates every access
 // token against UserService.ValidateToken.
+//
+// Fund movement (reserving balance when an order is placed, settling it
+// on each fill) is not yet wired to WalletService — see wallet.proto and
+// the TODO markers in the matching implementation. Orders match and
+// produce trades correctly; no money actually moves yet.
 type OrderServiceServer interface {
-	// CreateOrder places a new order for the authenticated caller.
-	// instrument_id is trusted as-is and not currently verified against
-	// SpotInstrumentService (no cross-service existence check yet).
-	// price is required when type is ORDER_TYPE_LIMIT and rejected when type
-	// is ORDER_TYPE_MARKET; this is enforced by the application layer, not
-	// by proto field constraints, since it depends on the value of a sibling
-	// field.
+	// GetLastTradePrices returns the most recent trade price for each
+	// requested instrument, in one round trip — called by
+	// SpotInstrumentService's polling worker, which needs this for every
+	// active instrument on each poll, not one at a time. Instruments with
+	// no trade yet are simply omitted from the response rather than
+	// erroring; the caller can tell "no price yet" from "not in my
+	// results" without a per-instrument NotFound. Public: no access token
+	// required, same reasoning as GetInstrument — this is public market
+	// data, and this is a read of OrderService's own data, not a write
+	// into SpotInstrumentService, so there's no service-to-service
+	// authorization question to resolve (unlike wallet.proto's Reserve/
+	// Settle/Credit, which do write across the service boundary).
+	GetLastTradePrices(context.Context, *GetLastTradePricesRequest) (*GetLastTradePricesResponse, error)
+	// CreateOrder places a new order for the authenticated caller and
+	// immediately attempts to match it against resting opposite-side orders
+	// for the same instrument (price-time priority). instrument_id is
+	// trusted as-is and not currently verified against
+	// SpotInstrumentService. price is required when type is
+	// ORDER_TYPE_LIMIT and rejected when type is ORDER_TYPE_MARKET; this is
+	// enforced by the application layer, not by proto field constraints,
+	// since it depends on the value of a sibling field.
+	//
+	// A limit order that isn't fully matched rests in the book
+	// (ORDER_STATUS_OPEN or ORDER_STATUS_PARTIALLY_FILLED). A market order
+	// never rests: any unfilled remainder is cancelled immediately rather
+	// than waiting for a price it never specified.
 	CreateOrder(context.Context, *CreateOrderRequest) (*CreateOrderResponse, error)
 	// GetOrder returns a single order by ID. Only the order's owner may
 	// fetch it; returns PermissionDenied for any other caller.
@@ -143,11 +234,22 @@ type OrderServiceServer interface {
 	// page_size/page_token — not offset-based, so results stay stable and
 	// fast even as new orders are created between page fetches.
 	ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error)
-	// CancelOrder moves an open order to ORDER_STATUS_CANCELLED. Only the
-	// order's owner may cancel it. Cancelling an already-cancelled order is
-	// rejected, not treated as a no-op, so the caller can tell the two cases
-	// apart.
+	// CancelOrder moves an order to ORDER_STATUS_CANCELLED. Only the
+	// order's owner may cancel it. Rejected (FailedPrecondition) if the
+	// order is already in a terminal state (filled or cancelled) — not
+	// treated as a no-op, so the caller can tell a stale retry from a
+	// genuinely invalid request.
 	CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error)
+	// ListTrades returns trades the authenticated caller participated in
+	// (as either buyer or seller), across all their orders, newest first,
+	// using the same keyset pagination as ListOrders.
+	ListTrades(context.Context, *ListTradesRequest) (*ListTradesResponse, error)
+	// ListOrderTrades returns every trade a single order participated in,
+	// oldest first (the order in which its fills actually happened). Only
+	// the order's owner may call this for a given order_id. Not paginated:
+	// the number of fills one order accumulates is naturally bounded,
+	// unlike a user's whole trade history.
+	ListOrderTrades(context.Context, *ListOrderTradesRequest) (*ListOrderTradesResponse, error)
 	mustEmbedUnimplementedOrderServiceServer()
 }
 
@@ -158,6 +260,9 @@ type OrderServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedOrderServiceServer struct{}
 
+func (UnimplementedOrderServiceServer) GetLastTradePrices(context.Context, *GetLastTradePricesRequest) (*GetLastTradePricesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLastTradePrices not implemented")
+}
 func (UnimplementedOrderServiceServer) CreateOrder(context.Context, *CreateOrderRequest) (*CreateOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateOrder not implemented")
 }
@@ -169,6 +274,12 @@ func (UnimplementedOrderServiceServer) ListOrders(context.Context, *ListOrdersRe
 }
 func (UnimplementedOrderServiceServer) CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelOrder not implemented")
+}
+func (UnimplementedOrderServiceServer) ListTrades(context.Context, *ListTradesRequest) (*ListTradesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTrades not implemented")
+}
+func (UnimplementedOrderServiceServer) ListOrderTrades(context.Context, *ListOrderTradesRequest) (*ListOrderTradesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrderTrades not implemented")
 }
 func (UnimplementedOrderServiceServer) mustEmbedUnimplementedOrderServiceServer() {}
 func (UnimplementedOrderServiceServer) testEmbeddedByValue()                      {}
@@ -189,6 +300,24 @@ func RegisterOrderServiceServer(s grpc.ServiceRegistrar, srv OrderServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&OrderService_ServiceDesc, srv)
+}
+
+func _OrderService_GetLastTradePrices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLastTradePricesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).GetLastTradePrices(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_GetLastTradePrices_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).GetLastTradePrices(ctx, req.(*GetLastTradePricesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _OrderService_CreateOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -263,6 +392,42 @@ func _OrderService_CancelOrder_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrderService_ListTrades_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTradesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).ListTrades(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_ListTrades_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).ListTrades(ctx, req.(*ListTradesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrderService_ListOrderTrades_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrderTradesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).ListOrderTrades(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_ListOrderTrades_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).ListOrderTrades(ctx, req.(*ListOrderTradesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OrderService_ServiceDesc is the grpc.ServiceDesc for OrderService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -270,6 +435,10 @@ var OrderService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "orderservice.v1.OrderService",
 	HandlerType: (*OrderServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetLastTradePrices",
+			Handler:    _OrderService_GetLastTradePrices_Handler,
+		},
 		{
 			MethodName: "CreateOrder",
 			Handler:    _OrderService_CreateOrder_Handler,
@@ -285,6 +454,14 @@ var OrderService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelOrder",
 			Handler:    _OrderService_CancelOrder_Handler,
+		},
+		{
+			MethodName: "ListTrades",
+			Handler:    _OrderService_ListTrades_Handler,
+		},
+		{
+			MethodName: "ListOrderTrades",
+			Handler:    _OrderService_ListOrderTrades_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

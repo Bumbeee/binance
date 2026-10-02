@@ -25,6 +25,13 @@ type Config struct {
 	LogConfig logger.LoggerConfig
 
 	ShutdownTimeout time.Duration
+
+	OrderServiceAddr    string
+	OrderServiceTimeout time.Duration
+	RatePollInterval    time.Duration
+
+	OTLPEndpoint       string
+	TraceSamplingRatio float64
 }
 
 func Load() *Config {
@@ -49,5 +56,12 @@ func Load() *Config {
 		LogConfig: getLogConfig(),
 
 		ShutdownTimeout: getShutdownTimeout(),
+
+		OrderServiceAddr:    getOrderServiceAddr(),
+		OrderServiceTimeout: getOrderServiceTimeout(),
+		RatePollInterval:    getRatePollInterval(),
+
+		OTLPEndpoint:       getOTLPEndpoint(),
+		TraceSamplingRatio: getTraceSamplingRatio(),
 	}
 }

@@ -1,9 +1,8 @@
 syntax = "proto3";
 
 // Package orderservice.v1 defines the public gRPC contract for
-// OrderService: placing, viewing and cancelling orders. This first version
-// has no matching engine — orders are recorded and can be cancelled, but
-// are never automatically filled against each other.
+// OrderService: placing, viewing and cancelling orders, and reading back
+// the trades a matching engine produces when orders cross.
 package orderservice.v1;
 
 option go_package = "orderservice/v1;orderv1";
@@ -19,14 +18,39 @@ import "buf/validate/validate.proto";
 // Authentication is verified the same way as in SpotInstrumentService: this
 // service holds no signing secret of its own and validates every access
 // token against UserService.ValidateToken.
+//
+// Fund movement (reserving balance when an order is placed, settling it
+// on each fill) is not yet wired to WalletService — see wallet.proto and
+// the TODO markers in the matching implementation. Orders match and
+// produce trades correctly; no money actually moves yet.
 service OrderService {
-  // CreateOrder places a new order for the authenticated caller.
-  // instrument_id is trusted as-is and not currently verified against
-  // SpotInstrumentService (no cross-service existence check yet).
-  // price is required when type is ORDER_TYPE_LIMIT and rejected when type
-  // is ORDER_TYPE_MARKET; this is enforced by the application layer, not
-  // by proto field constraints, since it depends on the value of a sibling
-  // field.
+  // GetLastTradePrices returns the most recent trade price for each
+  // requested instrument, in one round trip — called by
+  // SpotInstrumentService's polling worker, which needs this for every
+  // active instrument on each poll, not one at a time. Instruments with
+  // no trade yet are simply omitted from the response rather than
+  // erroring; the caller can tell "no price yet" from "not in my
+  // results" without a per-instrument NotFound. Public: no access token
+  // required, same reasoning as GetInstrument — this is public market
+  // data, and this is a read of OrderService's own data, not a write
+  // into SpotInstrumentService, so there's no service-to-service
+  // authorization question to resolve (unlike wallet.proto's Reserve/
+  // Settle/Credit, which do write across the service boundary).
+  rpc GetLastTradePrices (GetLastTradePricesRequest) returns (GetLastTradePricesResponse) {}
+
+  // CreateOrder places a new order for the authenticated caller and
+  // immediately attempts to match it against resting opposite-side orders
+  // for the same instrument (price-time priority). instrument_id is
+  // trusted as-is and not currently verified against
+  // SpotInstrumentService. price is required when type is
+  // ORDER_TYPE_LIMIT and rejected when type is ORDER_TYPE_MARKET; this is
+  // enforced by the application layer, not by proto field constraints,
+  // since it depends on the value of a sibling field.
+  //
+  // A limit order that isn't fully matched rests in the book
+  // (ORDER_STATUS_OPEN or ORDER_STATUS_PARTIALLY_FILLED). A market order
+  // never rests: any unfilled remainder is cancelled immediately rather
+  // than waiting for a price it never specified.
   rpc CreateOrder (CreateOrderRequest) returns (CreateOrderResponse) {}
 
   // GetOrder returns a single order by ID. Only the order's owner may
@@ -39,11 +63,24 @@ service OrderService {
   // fast even as new orders are created between page fetches.
   rpc ListOrders (ListOrdersRequest) returns (ListOrdersResponse) {}
 
-  // CancelOrder moves an open order to ORDER_STATUS_CANCELLED. Only the
-  // order's owner may cancel it. Cancelling an already-cancelled order is
-  // rejected, not treated as a no-op, so the caller can tell the two cases
-  // apart.
+  // CancelOrder moves an order to ORDER_STATUS_CANCELLED. Only the
+  // order's owner may cancel it. Rejected (FailedPrecondition) if the
+  // order is already in a terminal state (filled or cancelled) — not
+  // treated as a no-op, so the caller can tell a stale retry from a
+  // genuinely invalid request.
   rpc CancelOrder (CancelOrderRequest) returns (CancelOrderResponse) {}
+
+  // ListTrades returns trades the authenticated caller participated in
+  // (as either buyer or seller), across all their orders, newest first,
+  // using the same keyset pagination as ListOrders.
+  rpc ListTrades (ListTradesRequest) returns (ListTradesResponse) {}
+
+  // ListOrderTrades returns every trade a single order participated in,
+  // oldest first (the order in which its fills actually happened). Only
+  // the order's owner may call this for a given order_id. Not paginated:
+  // the number of fills one order accumulates is naturally bounded,
+  // unlike a user's whole trade history.
+  rpc ListOrderTrades (ListOrderTradesRequest) returns (ListOrderTradesResponse) {}
 }
 
 // OrderSide is the direction of an order.
@@ -53,20 +90,22 @@ enum OrderSide {
   ORDER_SIDE_SELL = 2;
 }
 
-// OrderType determines whether price is required.
+// OrderType determines whether price is required and whether the order
+// rests in the book when it isn't fully filled immediately.
 enum OrderType {
   ORDER_TYPE_UNSPECIFIED = 0;
-  // ORDER_TYPE_MARKET orders carry no price: they are intended to execute
-  // at the prevailing market rate once a matching engine exists. price
-  // must not be set on a market order.
+  // ORDER_TYPE_MARKET orders carry no price and execute against whatever
+  // price is available right now; any unfilled remainder is cancelled,
+  // never left resting.
   ORDER_TYPE_MARKET = 1;
-  // ORDER_TYPE_LIMIT orders require an explicit price.
+  // ORDER_TYPE_LIMIT orders require an explicit price and rest in the
+  // book until fully filled or cancelled.
   ORDER_TYPE_LIMIT = 2;
 }
 
-// OrderStatus reflects the current lifecycle state of an order. There is
-// no "filled" status yet: without a matching engine, an order only ever
-// transitions from open to cancelled.
+// OrderStatus reflects the current lifecycle state of an order.
+// ORDER_STATUS_FILLED and ORDER_STATUS_CANCELLED are terminal: an order
+// in either state can never change again.
 enum OrderStatus {
   ORDER_STATUS_UNSPECIFIED = 0;
   ORDER_STATUS_OPEN = 1;
@@ -88,11 +127,47 @@ message Order {
   OrderType type = 5;
   // price is empty for market orders.
   string price = 6;
+  // quantity is the original amount requested.
   string quantity = 7;
   OrderStatus status = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  // remaining_quantity is what's left unfilled. Equal to quantity when
+  // the order was never matched at all; decreases as trades execute
+  // against it; zero once ORDER_STATUS_FILLED.
   string remaining_quantity = 11;
+}
+
+// Trade is a single execution produced when a buy and a sell order cross.
+// price is always the resting (maker) order's price, not the incoming
+// (taker) order's — standard exchange convention.
+message Trade {
+  string id = 1;
+  string instrument_id = 2;
+  string buy_order_id = 3;
+  string sell_order_id = 4;
+  string price = 5;
+  string quantity = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message GetLastTradePricesRequest {
+  // instrument_ids is capped at 500 per call — if SpotInstrumentService
+  // ever tracks more active instruments than that, it should split the
+  // request into batches rather than this growing unbounded.
+  repeated string instrument_ids = 1 [(buf.validate.field).repeated = {max_items: 500}];
+}
+
+message LastTradePrice {
+  string instrument_id = 1;
+  string price = 2;
+  google.protobuf.Timestamp traded_at = 3;
+}
+
+message GetLastTradePricesResponse {
+  // prices omits any instrument_id from the request that has never
+  // traded — not an error per-entry, just absent.
+  repeated LastTradePrice prices = 1;
 }
 
 message CreateOrderRequest {
@@ -103,6 +178,13 @@ message CreateOrderRequest {
   // ORDER_TYPE_MARKET; enforced in the application layer.
   optional string price = 4 [(buf.validate.field).string.min_len = 1];
   string quantity = 5 [(buf.validate.field).string.min_len = 1];
+  // idempotency_key, if provided, must be a client-generated UUID unique
+  // per caller. A retried CreateOrder call with the same key and the same
+  // caller returns the order that was actually created the first time,
+  // rather than creating a duplicate — safe to retry after a timeout or
+  // dropped connection without risking placing the same order twice.
+  // Optional: omit it and each call creates a new order unconditionally.
+  optional string idempotency_key = 6 [(buf.validate.field).string.uuid = true];
 }
 
 message CreateOrderResponse {
@@ -142,4 +224,22 @@ message CancelOrderRequest {
 
 message CancelOrderResponse {
   Order order = 1;
+}
+
+message ListTradesRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  string page_token = 2;
+}
+
+message ListTradesResponse {
+  repeated Trade trades = 1;
+  string next_page_token = 2;
+}
+
+message ListOrderTradesRequest {
+  string order_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ListOrderTradesResponse {
+  repeated Trade trades = 1;
 }

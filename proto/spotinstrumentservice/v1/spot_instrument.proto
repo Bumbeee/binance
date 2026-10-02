@@ -87,7 +87,7 @@ message Instrument {
 }
 
 message CreateInstrumentRequest {
-  string symbol = 1 [(buf.validate.field).string.min_len = 1];
+  string symbol = 1 [(buf.validate.field).string = {min_len: 1, max_len: 16}];
   string base_asset = 2 [(buf.validate.field).string.min_len = 1];
   string quote_asset = 3 [(buf.validate.field).string.min_len = 1];
   int32 price_precision = 4 [(buf.validate.field).int32.gte = 0];

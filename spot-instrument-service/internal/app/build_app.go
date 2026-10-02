@@ -9,20 +9,27 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	spotv1 "market/proto/spotinstrumentservice/v1"
 	"market/shared/infra/logger"
-	pool "market/shared/infra/pool"
+	"market/shared/infra/pool"
+	"market/shared/tracing"
+
 	grpcadapter "spot-instrument-service/internal/adapters/inbound/grpc"
 	"spot-instrument-service/internal/adapters/inbound/grpc/interceptor"
+	"spot-instrument-service/internal/adapters/outbound/orderclient"
 	"spot-instrument-service/internal/adapters/outbound/postgres"
 	"spot-instrument-service/internal/adapters/outbound/userclient"
 	"spot-instrument-service/internal/config"
 	"spot-instrument-service/internal/core/services/instrument"
+	"spot-instrument-service/internal/worker"
 )
+
+const serviceName = "spot-instrument-service"
 
 func BuildApp() {
 	cfg := config.Load()
@@ -36,6 +43,20 @@ func BuildApp() {
 
 	ctx := context.Background()
 
+	shutdownTracing, err := tracing.Init(ctx, tracing.Config{
+		ServiceName:   serviceName,
+		OTLPEndpoint:  cfg.OTLPEndpoint,
+		SamplingRatio: cfg.TraceSamplingRatio,
+	})
+	if err != nil {
+		log.Fatal("failed to init tracing", zap.Error(err))
+	}
+	defer func() {
+		if err := shutdownTracing(ctx); err != nil {
+			log.Error("failed to shut down tracing", zap.Error(err))
+		}
+	}()
+
 	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
@@ -46,6 +67,11 @@ func BuildApp() {
 		log.Fatal("failed to connect to user-service", zap.Error(err))
 	}
 
+	orderClient, err := orderclient.New(cfg.OrderServiceAddr, cfg.OrderServiceTimeout)
+	if err != nil {
+		log.Fatal("failed to connect to order-service", zap.Error(err))
+	}
+
 	repo := postgres.NewInstrumentRepository(dbpool)
 
 	createInstrumentCase := instrument.NewCreateInstrumentCase(repo)
@@ -54,15 +80,19 @@ func BuildApp() {
 	archiveInstrumentCase := instrument.NewArchiveInstrumentCase(repo)
 	updateRateCase := instrument.NewUpdateRateCase(repo)
 
+	ratePoller := worker.NewRatePoller(orderClient, repo, log)
+	pollerCtx, cancelPoller := context.WithCancel(context.Background())
+	go ratePoller.Run(pollerCtx, cfg.RatePollInterval)
+
 	loggingInterceptor := interceptor.NewLoggingInterceptor(log)
 	authInterceptor := interceptor.NewAuthInterceptor(userClient)
-
 	validationInterceptor, err := interceptor.NewValidationInterceptor()
 	if err != nil {
 		log.Fatal("failed to init validation interceptor", zap.Error(err))
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			loggingInterceptor.Unary(),
 			validationInterceptor.Unary(),
@@ -119,6 +149,8 @@ func BuildApp() {
 		grpcServer.Stop()
 	}
 
+	cancelPoller()
+
 	dbpool.Close()
 	log.Info("postgres pool closed")
 
@@ -126,6 +158,12 @@ func BuildApp() {
 		log.Error("failed to close user-service client", zap.Error(err))
 	} else {
 		log.Info("user-service client closed")
+	}
+
+	if err := orderClient.Close(); err != nil {
+		log.Error("failed to close order-service client", zap.Error(err))
+	} else {
+		log.Info("order-service client closed")
 	}
 
 	log.Info("shutdown complete")

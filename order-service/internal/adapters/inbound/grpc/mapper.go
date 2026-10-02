@@ -6,6 +6,7 @@ import (
 	orderv1 "market/proto/orderservice/v1"
 	"order-service/internal/core/domain"
 	"order-service/internal/core/services/order"
+	"order-service/internal/core/services/trade"
 )
 
 func toProtoSide(s string) orderv1.OrderSide {
@@ -119,4 +120,16 @@ func toListOrdersResponse(r *order.ListOrdersResult) *orderv1.ListOrdersResponse
 
 func toCancelOrderResponse(r *order.OrderResult) *orderv1.CancelOrderResponse {
 	return &orderv1.CancelOrderResponse{Order: toProtoOrder(r)}
+}
+
+func toGetLastTradePricesResponse(results []*trade.LastTradePriceResult) *orderv1.GetLastTradePricesResponse {
+	prices := make([]*orderv1.LastTradePrice, 0, len(results))
+	for _, r := range results {
+		prices = append(prices, &orderv1.LastTradePrice{
+			InstrumentId: r.InstrumentID,
+			Price:        r.Price,
+			TradedAt:     timestamppb.New(r.TradedAt),
+		})
+	}
+	return &orderv1.GetLastTradePricesResponse{Prices: prices}
 }

@@ -1,4 +1,4 @@
-package userclient
+package orderclient
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
-	user "market/proto/userservice/v1"
+	orderv1 "market/proto/orderservice/v1"
+	"spot-instrument-service/internal/core/ports"
 )
 
 type Client struct {
-	stub    user.UserServiceClient
+	stub    orderv1.OrderServiceClient
 	conn    *grpc.ClientConn
 	timeout time.Duration
 }
@@ -45,7 +46,7 @@ func New(addr string, timeout time.Duration) (*Client, error) {
 	}
 
 	return &Client{
-		stub:    user.NewUserServiceClient(conn),
+		stub:    orderv1.NewOrderServiceClient(conn),
 		conn:    conn,
 		timeout: timeout,
 	}, nil
@@ -55,20 +56,25 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Client) Validate(ctx context.Context, accessToken string) (userID string, role string, valid bool, err error) {
+func (c *Client) GetLastTradePrices(ctx context.Context, instrumentIDs []string) ([]ports.PriceUpdate, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	resp, err := c.stub.ValidateToken(ctx, &user.ValidateTokenRequest{
-		AccessToken: accessToken,
+	resp, err := c.stub.GetLastTradePrices(ctx, &orderv1.GetLastTradePricesRequest{
+		InstrumentIds: instrumentIDs,
 	})
 	if err != nil {
-		return "", "", false, err
+		return nil, err
 	}
 
-	if !resp.Valid {
-		return "", "", false, nil
+	updates := make([]ports.PriceUpdate, 0, len(resp.Prices))
+	for _, p := range resp.Prices {
+		updates = append(updates, ports.PriceUpdate{
+			InstrumentID: p.InstrumentId,
+			Price:        p.Price,
+			TradedAt:     p.TradedAt.AsTime(),
+		})
 	}
 
-	return resp.UserId, resp.Role.String(), true, nil
+	return updates, nil
 }

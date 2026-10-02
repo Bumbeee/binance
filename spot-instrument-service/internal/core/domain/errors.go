@@ -4,6 +4,7 @@ import "errors"
 
 var (
 	ErrEmptySymbol              = errors.New("symbol is empty")
+	ErrSymbolTooLong            = errors.New("symbol must be at most 16 characters")
 	ErrEmptyBaseAsset           = errors.New("base asset is empty")
 	ErrEmptyQuoteAsset          = errors.New("quote asset is empty")
 	ErrInvalidPricePrecision    = errors.New("price precision should be positive")

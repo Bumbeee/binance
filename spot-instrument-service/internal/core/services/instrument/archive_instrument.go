@@ -2,6 +2,7 @@ package instrument
 
 import (
 	"context"
+	"time"
 
 	"spot-instrument-service/internal/core/domain"
 	"spot-instrument-service/internal/core/ports"
@@ -16,7 +17,7 @@ func NewArchiveInstrumentCase(repo ports.InstrumentRepository) *ArchiveInstrumen
 }
 
 func (uc *ArchiveInstrumentCase) Execute(ctx context.Context, id string) (*InstrumentResult, error) {
-	inst, err := uc.repo.UpdateStatus(ctx, id, domain.InstrumentStatusDelisted) // TODO: replace updates methods with one
+	inst, err := uc.repo.UpdateStatus(ctx, id, domain.InstrumentStatusDelisted, time.Now())
 	if err != nil {
 		return nil, err
 	}

@@ -128,3 +128,28 @@ func getLogConfig() logger.LoggerConfig {
 func getShutdownTimeout() time.Duration {
 	return getEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
 }
+
+func getOrderServiceAddr() string {
+	return mustGetEnv("ORDER_SERVICE_ADDR")
+}
+
+func getOrderServiceTimeout() time.Duration {
+	return getEnvDuration("ORDER_SERVICE_TIMEOUT", 5*time.Second)
+}
+
+func getRatePollInterval() time.Duration {
+	return getEnvDuration("RATE_POLL_INTERVAL", 10*time.Second)
+}
+
+func getOTLPEndpoint() string {
+	return getEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "tempo:4317")
+}
+
+func getTraceSamplingRatio() float64 {
+	v := getEnvString("TRACE_SAMPLING_RATIO", "1.0")
+	ratio, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 1.0
+	}
+	return ratio
+}

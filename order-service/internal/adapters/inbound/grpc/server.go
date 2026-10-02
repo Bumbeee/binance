@@ -8,16 +8,18 @@ import (
 	"order-service/internal/adapters/inbound/grpc/interceptor"
 	"order-service/internal/core/domain"
 	"order-service/internal/core/services/order"
+	"order-service/internal/core/services/trade"
 )
 
 var errMissingUserID = errors.New("user id not found in context")
 
 type Server struct {
 	orderv1.UnimplementedOrderServiceServer
-	createOrder *order.CreateOrderCase
-	getOrder    *order.GetOrderCase
-	listOrders  *order.ListOrdersCase
-	cancelOrder *order.CancelOrderCase
+	createOrder        *order.CreateOrderCase
+	getOrder           *order.GetOrderCase
+	listOrders         *order.ListOrdersCase
+	cancelOrder        *order.CancelOrderCase
+	getLastTradePrices *trade.GetLastTradePricesCase
 }
 
 func NewServer(
@@ -25,12 +27,14 @@ func NewServer(
 	getOrder *order.GetOrderCase,
 	listOrders *order.ListOrdersCase,
 	cancelOrder *order.CancelOrderCase,
+	getLastTradePrices *trade.GetLastTradePricesCase,
 ) *Server {
 	return &Server{
-		createOrder: createOrder,
-		getOrder:    getOrder,
-		listOrders:  listOrders,
-		cancelOrder: cancelOrder,
+		createOrder:        createOrder,
+		getOrder:           getOrder,
+		listOrders:         listOrders,
+		cancelOrder:        cancelOrder,
+		getLastTradePrices: getLastTradePrices,
 	}
 }
 
@@ -45,6 +49,11 @@ func (s *Server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderReques
 		price = *req.Price
 	}
 
+	var idempotencyKey string
+	if req.IdempotencyKey != nil {
+		idempotencyKey = *req.IdempotencyKey
+	}
+
 	res, err := s.createOrder.Execute(
 		ctx,
 		userID,
@@ -53,6 +62,7 @@ func (s *Server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderReques
 		fromProtoType(req.Type),
 		price,
 		req.Quantity,
+		idempotencyKey,
 	)
 	if err != nil {
 		return nil, toGRPCError(err)
@@ -103,4 +113,15 @@ func (s *Server) CancelOrder(ctx context.Context, req *orderv1.CancelOrderReques
 		return nil, toGRPCError(err)
 	}
 	return toCancelOrderResponse(res), nil
+}
+
+// GetLastTradePrices is public (see interceptor.publicMethods) — it has
+// no caller user_id in context at all, since SpotInstrumentService's rate
+// poller calls it without any access token.
+func (s *Server) GetLastTradePrices(ctx context.Context, req *orderv1.GetLastTradePricesRequest) (*orderv1.GetLastTradePricesResponse, error) {
+	res, err := s.getLastTradePrices.Execute(ctx, req.InstrumentIds)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return toGetLastTradePricesResponse(res), nil
 }

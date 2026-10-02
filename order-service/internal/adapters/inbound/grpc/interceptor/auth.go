@@ -18,6 +18,10 @@ const (
 	userRoleContextKey contextKey = "user_role"
 )
 
+var publicMethods = map[string]bool{
+	"/orderservice.v1.OrderService/GetLastTradePrices": true,
+}
+
 type AuthInterceptor struct {
 	validator ports.TokenValidator
 }
@@ -28,6 +32,10 @@ func NewAuthInterceptor(validator ports.TokenValidator) *AuthInterceptor {
 
 func (a *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if publicMethods[info.FullMethod] {
+			return handler(ctx, req)
+		}
+
 		accessToken, err := tools.ExtractToken(ctx)
 		if err != nil {
 			return nil, err
@@ -48,9 +56,9 @@ func (a *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 }
 
 func UserIDFromContext(ctx context.Context) (string, bool) {
-	return tools.ValueFromContext(ctx, userIDContextKey)
+	return tools.StringFromContext(ctx, userIDContextKey)
 }
 
 func UserRoleFromContext(ctx context.Context) (string, bool) {
-	return tools.ValueFromContext(ctx, userRoleContextKey)
+	return tools.StringFromContext(ctx, userRoleContextKey)
 }

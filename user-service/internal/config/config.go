@@ -42,6 +42,9 @@ type Config struct {
 	LogConfig logger.LoggerConfig
 
 	RateLimitConfig RateLimitConfig
+
+	OTLPEndpoint       string
+	TraceSamplingRatio float64
 }
 
 func Load() *Config {
@@ -80,5 +83,8 @@ func Load() *Config {
 			MaxDelay:  getRateLimitMaxDelay(),
 			FailTTL:   getRateLimitFailTTL(),
 		},
+
+		OTLPEndpoint:       getOTLPEndpoint(),
+		TraceSamplingRatio: getTraceSamplingRatio(),
 	}
 }

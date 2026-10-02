@@ -127,7 +127,7 @@ func (r *pgxInstrumentRepository) List(ctx context.Context, statusFilter *domain
 	return instruments, nil
 }
 
-func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate string) (*domain.Instrument, error) {
+func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate string, now time.Time) (*domain.Instrument, error) {
 	query := `
 		UPDATE instruments
 		SET current_rate = $1, updated_at = $2
@@ -138,7 +138,7 @@ func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate strin
 		          created_at, updated_at
 	`
 
-	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, rate, time.Now(), id)) // TODO: replace time.Now() with time from domain.instrument as it's already created
+	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, rate, now, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrInstrumentNotFound
 	}
@@ -149,10 +149,10 @@ func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate strin
 	return instrument, nil
 }
 
-func (r *pgxInstrumentRepository) UpdateRateBySymbol(ctx context.Context, symbol, rate string) error {
+func (r *pgxInstrumentRepository) UpdateRateBySymbol(ctx context.Context, symbol, rate string, now time.Time) error {
 	query := `UPDATE instruments SET current_rate = $1, updated_at = $2 WHERE symbol = $3`
 
-	_, err := r.pool.Exec(ctx, query, rate, time.Now(), symbol)
+	_, err := r.pool.Exec(ctx, query, rate, now, symbol)
 	if err != nil {
 		return fmt.Errorf("instrument_repo.UpdateRateBySymbol: %w", err)
 	}
@@ -160,7 +160,7 @@ func (r *pgxInstrumentRepository) UpdateRateBySymbol(ctx context.Context, symbol
 	return nil
 }
 
-func (r *pgxInstrumentRepository) UpdateStatus(ctx context.Context, id string, status domain.InstrumentStatus) (*domain.Instrument, error) {
+func (r *pgxInstrumentRepository) UpdateStatus(ctx context.Context, id string, status domain.InstrumentStatus, now time.Time) (*domain.Instrument, error) {
 	query := `
 		UPDATE instruments
 		SET status = $1, updated_at = $2
@@ -171,7 +171,7 @@ func (r *pgxInstrumentRepository) UpdateStatus(ctx context.Context, id string, s
 		          created_at, updated_at
 	`
 
-	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, string(status), time.Now(), id))
+	instrument, err := scanInstrument(r.pool.QueryRow(ctx, query, string(status), now, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrInstrumentNotFound
 	}

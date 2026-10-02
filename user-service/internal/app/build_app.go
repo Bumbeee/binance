@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -16,6 +18,8 @@ import (
 	"market/shared/infra/logger"
 	"market/shared/infra/pool"
 	"market/shared/infra/redis"
+	"market/shared/tracing"
+
 	grpcadapter "userservice/internal/adapters/inbound/grpc"
 	"userservice/internal/adapters/inbound/grpc/interceptor"
 	"userservice/internal/adapters/outbound/hasher"
@@ -28,16 +32,34 @@ import (
 	"userservice/internal/core/services/token"
 )
 
+const serviceName = "user-service"
+
 func BuildApp() {
 	cfg := config.Load()
 
 	log, err := logger.New(cfg.LogConfig)
 	if err != nil {
-		log.Error("error init logger", zap.Error(err))
+		fmt.Fprintln(os.Stderr, "failed to init logger:", err)
+		os.Exit(1)
 	}
 	defer log.Sync()
 
 	ctx := context.Background()
+
+	shutdownTracing, err := tracing.Init(ctx, tracing.Config{
+		ServiceName:   serviceName,
+		OTLPEndpoint:  cfg.OTLPEndpoint,
+		SamplingRatio: cfg.TraceSamplingRatio,
+	})
+	if err != nil {
+		log.Fatal("failed to init tracing", zap.Error(err))
+	}
+	defer func() {
+		if err := shutdownTracing(ctx); err != nil {
+			log.Error("failed to shut down tracing", zap.Error(err))
+		}
+	}()
+
 	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
@@ -65,7 +87,7 @@ func BuildApp() {
 	refreshTokenCase := token.NewRefreshTokenCase(refreshTokenStore, tokens, repo, cfg.RefreshTokenTTL)
 	getProfileCase := profile.NewGetProfileCase(repo)
 	getUserProfileCase := profile.NewGetUserProfileCase(repo)
-	changePasswordCase := auth.NewChangePasswordCase(repo, hasher, passwordRequirements)
+	changePasswordCase := auth.NewChangePasswordCase(repo, hasher, passwordRequirements) // отзывать токен при сбросе?
 	updateProfileCase := profile.NewUpdateProfileCase(repo)
 
 	loggingInterceptor := interceptor.NewLoggingInterceptor(log)
@@ -85,6 +107,7 @@ func BuildApp() {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			loggingInterceptor.Unary(),
 			validationInterceptor.Unary(),

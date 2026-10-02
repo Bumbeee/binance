@@ -58,11 +58,12 @@ type Order struct {
 	Quantity          string
 	RemainingQuantity string
 	Status            OrderStatus
+	IdempotencyKey    string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
 
-func NewOrder(userID, instrumentID uuid.UUID, side OrderSide, orderType OrderType, price, quantity string) (*Order, error) {
+func NewOrder(userID, instrumentID uuid.UUID, side OrderSide, orderType OrderType, price, quantity, idempotencyKey string) (*Order, error) {
 	if !side.IsValid() {
 		return nil, ErrInvalidSide
 	}
@@ -96,6 +97,7 @@ func NewOrder(userID, instrumentID uuid.UUID, side OrderSide, orderType OrderTyp
 		Quantity:          quantity,
 		RemainingQuantity: quantity,
 		Status:            OrderStatusOpen,
+		IdempotencyKey:    idempotencyKey,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}, nil

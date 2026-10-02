@@ -738,9 +738,9 @@ const file_spotinstrumentservice_v1_spot_instrument_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa5\x02\n" +
-	"\x17CreateInstrumentRequest\x12\x1f\n" +
-	"\x06symbol\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06symbol\x12&\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa7\x02\n" +
+	"\x17CreateInstrumentRequest\x12!\n" +
+	"\x06symbol\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18\x10R\x06symbol\x12&\n" +
 	"\n" +
 	"base_asset\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbaseAsset\x12(\n" +
 	"\vquote_asset\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
