@@ -6,8 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxSymbolLength = 16
-
 type InstrumentStatus string
 
 const (
@@ -41,9 +39,6 @@ type Instrument struct {
 func NewInstrument(symbol, baseAsset, quoteAsset string, pricePrecision, quantityPrecision int32, minOrderSize string) (*Instrument, error) {
 	if symbol == "" {
 		return nil, ErrEmptySymbol
-	}
-	if len(symbol) > maxSymbolLength {
-		return nil, ErrSymbolTooLong
 	}
 	if baseAsset == "" {
 		return nil, ErrEmptyBaseAsset
