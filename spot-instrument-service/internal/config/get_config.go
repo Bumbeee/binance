@@ -138,7 +138,7 @@ func getOrderServiceTimeout() time.Duration {
 }
 
 func getRatePollInterval() time.Duration {
-	return getEnvDuration("RATE_POLL_INTERVAL", 10*time.Second)
+	return getEnvDuration("RATE_POLL_INTERVAL", 2*time.Second)
 }
 
 func getOTLPEndpoint() string {

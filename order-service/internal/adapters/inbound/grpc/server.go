@@ -115,9 +115,6 @@ func (s *Server) CancelOrder(ctx context.Context, req *orderv1.CancelOrderReques
 	return toCancelOrderResponse(res), nil
 }
 
-// GetLastTradePrices is public (see interceptor.publicMethods) — it has
-// no caller user_id in context at all, since SpotInstrumentService's rate
-// poller calls it without any access token.
 func (s *Server) GetLastTradePrices(ctx context.Context, req *orderv1.GetLastTradePricesRequest) (*orderv1.GetLastTradePricesResponse, error) {
 	res, err := s.getLastTradePrices.Execute(ctx, req.InstrumentIds)
 	if err != nil {
