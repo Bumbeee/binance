@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"market/shared/tracing"
 	"market/shared/validator"
 	"userservice/internal/core/ports"
 )
@@ -27,13 +28,16 @@ func NewChangePasswordCase(
 	}
 }
 
-func (uc *ChangePasswordCase) Execute(ctx context.Context, userID, oldPassword, newPassword string) error {
+func (uc *ChangePasswordCase) Execute(ctx context.Context, userID, oldPassword, newPassword string) (err error) {
+	ctx, span := tracing.Start(ctx, "auth.ChangePassword")
+	defer span.End(&err, ErrWeakPassword)
+
 	user, err := uc.repo.FindByID(ctx, userID)
 	if err != nil {
 		return err
 	}
 
-	if err := uc.hasher.Compare(user.PasswordHash, oldPassword); err != nil {
+	if err := uc.hasher.Compare(ctx, user.PasswordHash, oldPassword); err != nil {
 		return ErrInvalidCredentials
 	}
 
@@ -42,7 +46,7 @@ func (uc *ChangePasswordCase) Execute(ctx context.Context, userID, oldPassword, 
 		return fmt.Errorf("%w: %s", ErrWeakPassword, strings.Join(result.Errors, "; "))
 	}
 
-	newHash, err := uc.hasher.Hash(newPassword)
+	newHash, err := uc.hasher.Hash(ctx, newPassword)
 	if err != nil {
 		return err
 	}

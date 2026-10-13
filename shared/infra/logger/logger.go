@@ -1,15 +1,17 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-type LoggerConfig struct { // TODO: унифицировать вид логов ?????
+type LoggerConfig struct {
 	Level             string
 	EncodingJSON      bool
 	EncodingConsole   bool
@@ -76,4 +78,15 @@ func newEncoder(useJSON, useConsole bool, cfg zapcore.EncoderConfig) (zapcore.En
 		return zapcore.NewConsoleEncoder(cfg), nil
 	}
 	return zapcore.NewJSONEncoder(cfg), nil
+}
+
+func WithTrace(ctx context.Context, log *zap.Logger) *zap.Logger {
+	sc := trace.SpanContextFromContext(ctx)
+	if !sc.IsValid() {
+		return log
+	}
+	return log.With(
+		zap.String("trace_id", sc.TraceID().String()),
+		zap.String("span_id", sc.SpanID().String()),
+	)
 }

@@ -15,13 +15,16 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	orderv1 "market/proto/orderservice/v1"
+	"market/shared/infra/kafka"
 	"market/shared/infra/logger"
 	"market/shared/infra/pool"
+	"market/shared/metrics"
 	"market/shared/tracing"
 
 	grpcadapter "order-service/internal/adapters/inbound/grpc"
 	"order-service/internal/adapters/inbound/grpc/interceptor"
 	userclient "order-service/internal/adapters/outbound/client"
+	"order-service/internal/adapters/outbound/eventpub"
 	"order-service/internal/adapters/outbound/postgres"
 	"order-service/internal/config"
 	"order-service/internal/core/services/order"
@@ -56,6 +59,31 @@ func BuildApp() {
 		}
 	}()
 
+	shutdownMetrics, err := metrics.Init(ctx, log, metrics.Config{
+		ServiceName: serviceName,
+		Addr:        cfg.MetricsAddr,
+	})
+	if err != nil {
+		log.Fatal("failed to init metrics", zap.Error(err))
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownMetrics(sctx); err != nil {
+			log.Warn("metrics shutdown", zap.Error(err))
+		}
+	}()
+
+	producer, err := kafka.NewProducer(ctx, kafka.Config{
+		Brokers:  cfg.KafkaBrokers,
+		ClientID: "order-service",
+	})
+	if err != nil {
+		log.Fatal("kafka producer: %w", zap.Error(err))
+	}
+	log.Info("kafka producer connected", zap.Strings("brokers", cfg.KafkaBrokers))
+	defer producer.Close()
+
 	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
@@ -70,8 +98,9 @@ func BuildApp() {
 	tradeRepo := postgres.NewTradeRepository(dbpool)
 
 	matchingEngine := order.NewMatchingEngine()
+	tradePublisher := eventpub.NewTradePublisher(producer)
 
-	createOrderCase := order.NewCreateOrderCase(repo, matchingEngine)
+	createOrderCase := order.NewCreateOrderCase(repo, matchingEngine, tradePublisher, log)
 	getOrderCase := order.NewGetOrderCase(repo)
 	listOrdersCase := order.NewListOrdersCase(repo)
 	cancelOrderCase := order.NewCancelOrderCase(repo)

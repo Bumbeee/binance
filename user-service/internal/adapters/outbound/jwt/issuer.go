@@ -1,10 +1,13 @@
 package jwt
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"userservice/internal/core/domain"
 	"userservice/internal/core/ports"
@@ -39,8 +42,9 @@ func (i *Issuer) Issue(userID string, role domain.Role) (token string, expiresAt
 	return signed, expiresAt, nil
 }
 
-func (i *Issuer) Parse(tokenString string) (userID string, role domain.Role, err error) {
+func (i *Issuer) Parse(ctx context.Context, tokenString string) (userID string, role domain.Role, err error) {
 	claims := &Claims{}
+	span := trace.SpanFromContext(ctx)
 
 	t, parseErr := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -51,8 +55,10 @@ func (i *Issuer) Parse(tokenString string) (userID string, role domain.Role, err
 
 	if parseErr != nil {
 		if errors.Is(parseErr, jwt.ErrTokenExpired) {
+			span.SetAttributes(attribute.String("auth.invalid_reason", "expired"))
 			return "", "", ports.ErrTokenExpired
 		}
+		span.SetAttributes(attribute.String("auth.invalid_reason", "malformed"))
 		return "", "", ports.ErrMalformedToken
 	}
 	if !t.Valid {

@@ -42,7 +42,7 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 	if cfg.SamplingRatio >= 1.0 {
 		sampler = sdktrace.AlwaysSample()
 	} else {
-		sampler = sdktrace.TraceIDRatioBased(cfg.SamplingRatio)
+		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(cfg.SamplingRatio))
 	}
 
 	tp := sdktrace.NewTracerProvider(

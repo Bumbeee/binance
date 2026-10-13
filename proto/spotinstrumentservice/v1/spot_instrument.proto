@@ -64,26 +64,52 @@ enum InstrumentStatus {
 // strings, not double, to avoid floating-point rounding errors on values
 // that represent real money.
 message Instrument {
-  string id = 1;
+  option (buf.validate.message).cel = {
+    id: "instrument.updated_not_before_created"
+    message: "updated_at must not be earlier than created_at"
+    expression: "this.updated_at >= this.created_at"
+  };
+
+  string id = 1 [(buf.validate.field).string.uuid = true];
   // symbol is the combined trading symbol, e.g. "BTCUSDT".
-  string symbol = 2;
+  string symbol = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 16,
+    (buf.validate.field).string.pattern = "^[A-Z0-9]+$"
+  ];
   // base_asset is the asset being bought/sold, e.g. "BTC".
-  string base_asset = 3;
+  string base_asset = 3 [(buf.validate.field).string.pattern = "^[A-Z0-9]{1,16}$"];
   // quote_asset is the asset used to price base_asset, e.g. "USDT".
-  string quote_asset = 4;
+  string quote_asset = 4 [(buf.validate.field).string.pattern = "^[A-Z0-9]{1,16}$"];
   // price_precision is the number of decimal digits allowed in order prices
-  // for this instrument.
-  int32 price_precision = 5;
+  // for this instrument. At most 18, matching the decimal strings used
+  // across the contract.
+  int32 price_precision = 5 [(buf.validate.field).int32 = {gte: 0, lte: 18}];
   // quantity_precision is the number of decimal digits allowed in order
-  // quantities for this instrument.
-  int32 quantity_precision = 6;
-  // min_order_size is the minimum tradable quantity, as a decimal string.
-  string min_order_size = 7;
-  // current_rate is the latest known exchange rate, as a decimal string.
-  string current_rate = 8;
-  InstrumentStatus status = 9;
-  google.protobuf.Timestamp created_at = 10;
-  google.protobuf.Timestamp updated_at = 11;
+  // quantities for this instrument. At most 18.
+  int32 quantity_precision = 6 [(buf.validate.field).int32 = {gte: 0, lte: 18}];
+  // min_order_size is the minimum tradable quantity, as a positive decimal
+  // string.
+  string min_order_size = 7 [
+    (buf.validate.field).string.max_len = 40,
+    (buf.validate.field).string.pattern = "^[0-9]{1,20}(\\.[0-9]{1,18})?$",
+    (buf.validate.field).cel = {
+      id: "instrument.min_order_size_positive"
+      message: "min_order_size must be greater than zero"
+      expression: "!this.matches('^[0.]*$')"
+    }
+  ];
+  
+  // current_rate is the latest known exchange rate, as a non-negative
+  // decimal string. "0" is valid: it is the initial value before the first
+  // rate update.
+  string current_rate = 8 [
+    (buf.validate.field).string.max_len = 40,
+    (buf.validate.field).string.pattern = "^[0-9]{1,20}(\\.[0-9]{1,18})?$"
+  ];
+  InstrumentStatus status = 9 [(buf.validate.field).enum = {not_in: [0], defined_only: true}];
+  google.protobuf.Timestamp created_at = 10 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp updated_at = 11 [(buf.validate.field).required = true];
 }
 
 message CreateInstrumentRequest {
@@ -109,12 +135,18 @@ message GetInstrumentResponse {
 
 message ListInstrumentsRequest {
   // status_filter restricts the result to instruments with this status.
-  // Unset returns instruments of all statuses.
-  optional InstrumentStatus status_filter = 1;
+  // Unset returns instruments of all statuses. If set, it must be a
+  // defined, non-UNSPECIFIED status.
+  optional InstrumentStatus status_filter = 1 [(buf.validate.field).enum = {not_in: [0], defined_only: true}];
+  int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  // page_token is opaque: pass back next_page_token from a previous response.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
 }
 
 message ListInstrumentsResponse {
   repeated Instrument instruments = 1;
+  // next_page_token is empty when there are no more results.
+  string next_page_token = 2;
 }
 
 message ArchiveInstrumentRequest {

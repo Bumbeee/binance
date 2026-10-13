@@ -58,12 +58,16 @@ func toGetInstrumentResponse(r *instrument.InstrumentResult) *spot.GetInstrument
 	return &spot.GetInstrumentResponse{Instrument: toProtoInstrument(r)}
 }
 
-func toListInstrumentsResponse(results []*instrument.InstrumentResult) *spot.ListInstrumentsResponse {
-	instruments := make([]*spot.Instrument, 0, len(results))
-	for _, r := range results {
-		instruments = append(instruments, toProtoInstrument(r))
+func toListInstrumentsResponse(r *instrument.ListInstrumentsResult) *spot.ListInstrumentsResponse {
+	instruments := make([]*spot.Instrument, 0, len(r.Instruments))
+	for _, inst := range r.Instruments {
+		instruments = append(instruments, toProtoInstrument(inst))
 	}
-	return &spot.ListInstrumentsResponse{Instruments: instruments}
+
+	return &spot.ListInstrumentsResponse{
+		Instruments:   instruments,
+		NextPageToken: r.NextPageToken,
+	}
 }
 
 func toArchiveInstrumentResponse(r *instrument.InstrumentResult) *spot.ArchiveInstrumentResponse {

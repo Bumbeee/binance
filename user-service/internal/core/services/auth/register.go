@@ -2,11 +2,14 @@ package auth
 
 import (
 	"context"
+	"market/shared/tracing"
 	"market/shared/validator"
 	"time"
 	"userservice/internal/core/domain"
 	"userservice/internal/core/ports"
 	"userservice/internal/core/services/token"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type RegisterCase struct {
@@ -41,12 +44,18 @@ type RegisterResult struct {
 	ExpiresAt    time.Time
 }
 
-func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword, firstName, lastName string) (*RegisterResult, error) {
+func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword, firstName, lastName string) (res *RegisterResult, err error) {
+	ctx, span := tracing.Start(ctx, "auth.Register")
+	defer span.End(&err,
+		domain.ErrInvalidCreds,
+		domain.ErrUserAlreadyExists,
+	)
+
 	if !ValidateCreds(email, plainPassword, r.passwordRequirements) {
 		return nil, domain.ErrInvalidCreds
 	}
 
-	hash, err := r.hasher.Hash(plainPassword)
+	hash, err := r.hasher.Hash(ctx, plainPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +83,13 @@ func (r *RegisterCase) Execute(ctx context.Context, email, plainPassword, firstN
 		return nil, err
 	}
 
-	return &RegisterResult{
+	res = &RegisterResult{
 		UserID:       user.ID.String(),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresAt:    expiresAt,
-	}, nil
+	}
+	span.SetAttributes(attribute.String("user.id", res.UserID))
+
+	return res, nil
 }

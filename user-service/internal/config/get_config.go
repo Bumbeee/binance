@@ -219,3 +219,9 @@ func getTraceSamplingRatio() float64 {
 	}
 	return ratio
 }
+
+// Metrics
+
+func getMetricsAddr() string {
+	return getEnvString("METRICS_ADDR", ":9091")
+}

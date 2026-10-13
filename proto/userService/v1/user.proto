@@ -85,12 +85,12 @@ enum Role {
 message AuthToken {
   // access_token is a short-lived JWT used to authenticate subsequent
   // requests. Passed as "authorization: Bearer <access_token>".
-  string access_token = 1;
+  string access_token = 1 [(buf.validate.field).string = {min_len: 1, max_len: 4096}];
   // refresh_token is a long-lived, opaque, single-use token used to obtain
   // a new AuthToken via RefreshToken. Rotated on every use.
-  string refresh_token = 2;
+  string refresh_token = 2 [(buf.validate.field).string = {min_len: 1, max_len: 512}];
   // expires_at is the expiration timestamp of access_token.
-  google.protobuf.Timestamp expires_at = 3;
+  google.protobuf.Timestamp expires_at = 3 [(buf.validate.field).required = true];
 }
 
 // RegisterRequest carries the data required to create a new account.
@@ -110,7 +110,7 @@ message RegisterResponse {
 // LoginRequest carries credentials for an existing account.
 message LoginRequest {
   string email = 1 [(buf.validate.field).string.email = true];
-  string password = 2 [(buf.validate.field).string.min_len = 1];
+  string password = 2 [(buf.validate.field).string.min_len = 8];
 }
 
 message LoginResponse {
@@ -130,12 +130,14 @@ message LogoutResponse {}
 message GetProfileRequest {}
 
 message GetProfileResponse {
-  string user_id = 1;
-  string email = 2;
-  Role role = 3;
-  google.protobuf.Timestamp created_at = 4;
-  string first_name = 5;
-  string last_name = 6;
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  string email = 2 [(buf.validate.field).string = {email: true, max_len: 254}];
+  Role role = 3 [(buf.validate.field).enum = {not_in: [0], defined_only: true}];
+  google.protobuf.Timestamp created_at = 4 [(buf.validate.field).required = true];
+  // first_name and last_name may be empty for accounts created before
+  // names were collected, so only the upper bound is enforced.
+  string first_name = 5 [(buf.validate.field).string.max_len = 100];
+  string last_name = 6 [(buf.validate.field).string.max_len = 100];
 }
 
 // GetUserProfileRequest identifies an arbitrary target user by ID.

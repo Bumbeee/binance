@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"order-service/internal/core/ports"
 )
@@ -35,6 +37,12 @@ func (uc *GetLastTradePricesCase) Execute(ctx context.Context, instrumentIDs []s
 	if err != nil {
 		return nil, err
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.Int("prices.requested", len(instrumentIDs)),
+		attribute.Int("prices.skipped_invalid", len(instrumentIDs)-len(parsed)),
+		attribute.Int("prices.returned", len(trades)),
+	)
 
 	results := make([]*LastTradePriceResult, 0, len(trades))
 	for instrumentID, t := range trades {

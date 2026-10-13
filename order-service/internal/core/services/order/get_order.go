@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"order-service/internal/core/domain"
 	"order-service/internal/core/ports"
@@ -27,6 +29,9 @@ func (uc *GetOrderCase) Execute(ctx context.Context, callerUserID, orderID strin
 	if err != nil {
 		return nil, err
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(attribute.String("order.id", parsedOrderID.String()))
 
 	o, err := uc.repo.GetByID(ctx, parsedOrderID)
 	if err != nil {

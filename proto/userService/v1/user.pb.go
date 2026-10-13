@@ -554,13 +554,15 @@ func (*GetProfileRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetProfileResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Role          Role                   `protobuf:"varint,3,opt,name=role,proto3,enum=userservice.v1.Role" json:"role,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	FirstName     string                 `protobuf:"bytes,5,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
-	LastName      string                 `protobuf:"bytes,6,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	UserId    string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Email     string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Role      Role                   `protobuf:"varint,3,opt,name=role,proto3,enum=userservice.v1.Role" json:"role,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// first_name and last_name may be empty for accounts created before
+	// names were collected, so only the upper bound is enforced.
+	FirstName     string `protobuf:"bytes,5,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
+	LastName      string `protobuf:"bytes,6,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1191,12 +1193,14 @@ var File_userservice_v1_user_proto protoreflect.FileDescriptor
 
 const file_userservice_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x19userservice/v1/user.proto\x12\x0euserservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\x8e\x01\n" +
-	"\tAuthToken\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x129\n" +
+	"\x19userservice/v1/user.proto\x12\x0euserservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xae\x01\n" +
+	"\tAuthToken\x12-\n" +
+	"\faccess_token\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80 R\vaccessToken\x12/\n" +
+	"\rrefresh_token\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\frefreshToken\x12A\n" +
 	"\n" +
-	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xa3\x01\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\texpiresAt\"\xa3\x01\n" +
 	"\x0fRegisterRequest\x12\x1d\n" +
 	"\x05email\x18\x01 \x01(\tB\a\xbaH\x04r\x02`\x01R\x05email\x12#\n" +
 	"\bpassword\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\bR\bpassword\x12&\n" +
@@ -1209,7 +1213,7 @@ const file_userservice_v1_user_proto_rawDesc = "" +
 	"auth_token\x18\x02 \x01(\v2\x19.userservice.v1.AuthTokenR\tauthToken\"R\n" +
 	"\fLoginRequest\x12\x1d\n" +
 	"\x05email\x18\x01 \x01(\tB\a\xbaH\x04r\x02`\x01R\x05email\x12#\n" +
-	"\bpassword\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bpassword\"b\n" +
+	"\bpassword\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\bR\bpassword\"b\n" +
 	"\rLoginResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x128\n" +
 	"\n" +
@@ -1217,16 +1221,18 @@ const file_userservice_v1_user_proto_rawDesc = "" +
 	"\rLogoutRequest\x12,\n" +
 	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\"\x10\n" +
 	"\x0eLogoutResponse\"\x13\n" +
-	"\x11GetProfileRequest\"\xe4\x01\n" +
-	"\x12GetProfileResponse\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
-	"\x05email\x18\x02 \x01(\tR\x05email\x12(\n" +
-	"\x04role\x18\x03 \x01(\x0e2\x14.userservice.v1.RoleR\x04role\x129\n" +
+	"\x11GetProfileRequest\"\xa0\x02\n" +
+	"\x12GetProfileResponse\x12!\n" +
+	"\auser_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\x12 \n" +
+	"\x05email\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x18\xfe\x01`\x01R\x05email\x124\n" +
+	"\x04role\x18\x03 \x01(\x0e2\x14.userservice.v1.RoleB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04role\x12A\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1d\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\x12&\n" +
 	"\n" +
-	"first_name\x18\x05 \x01(\tR\tfirstName\x12\x1b\n" +
-	"\tlast_name\x18\x06 \x01(\tR\blastName\":\n" +
+	"first_name\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x18dR\tfirstName\x12$\n" +
+	"\tlast_name\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x18dR\blastName\":\n" +
 	"\x15GetUserProfileRequest\x12!\n" +
 	"\auser_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\"\xac\x01\n" +
 	"\x16GetUserProfileResponse\x12\x17\n" +

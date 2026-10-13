@@ -32,7 +32,7 @@ type ValidateTokenResult struct {
 }
 
 func (uc *ValidateTokenCase) Execute(ctx context.Context, accessToken string) *ValidateTokenResult {
-	userID, role, err := uc.tokens.Parse(accessToken)
+	userID, role, err := uc.tokens.Parse(ctx, accessToken)
 	if err != nil {
 		reason := InvalidReasonMalformed
 		if errors.Is(err, ports.ErrTokenExpired) {

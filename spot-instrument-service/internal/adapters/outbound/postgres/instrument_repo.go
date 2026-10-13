@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"market/shared/infra/pagination"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +16,8 @@ import (
 	"spot-instrument-service/internal/core/domain"
 	"spot-instrument-service/internal/core/ports"
 )
+
+const defaultPageSize = 20
 
 type pgxInstrumentRepository struct {
 	pool *pgxpool.Pool
@@ -125,6 +129,121 @@ func (r *pgxInstrumentRepository) List(ctx context.Context, statusFilter *domain
 	}
 
 	return instruments, nil
+}
+
+func (r *pgxInstrumentRepository) ListPage(
+	ctx context.Context,
+	statusFilter *domain.InstrumentStatus,
+	pageSize int32,
+	pageToken string,
+) ([]*domain.Instrument, string, error) {
+
+	if pageSize <= 0 {
+		pageSize = defaultPageSize
+	}
+
+	var (
+		cursorCreatedAt time.Time
+		cursorID        uuid.UUID
+		hasCursor       bool
+	)
+
+	if pageToken != "" {
+		var err error
+		cursorCreatedAt, cursorID, err = pagination.DecodeCursor(pageToken)
+		if err != nil {
+			return nil, "", fmt.Errorf("instrument_repo.ListPage: %w", err)
+		}
+		hasCursor = true
+	}
+
+	var (
+		args       []any
+		conditions []string
+	)
+
+	if statusFilter != nil {
+		args = append(args, string(*statusFilter))
+		conditions = append(conditions, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if hasCursor {
+		args = append(args, cursorCreatedAt, cursorID)
+		conditions = append(conditions, fmt.Sprintf("(created_at, id) < ($%d, $%d)", len(args)-1, len(args)))
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	args = append(args, pageSize+1)
+	query := fmt.Sprintf(`
+		SELECT id, symbol, base_asset, quote_asset,
+		       price_precision, quantity_precision,
+		       min_order_size, current_rate, status,
+		       created_at, updated_at
+		FROM instruments
+		%s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d
+	`, where, len(args))
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("instrument_repo.ListPage: %w", err)
+	}
+	defer rows.Close()
+
+	var instruments []*domain.Instrument
+	for rows.Next() {
+		instrument, err := scanInstrument(rows)
+		if err != nil {
+			return nil, "", fmt.Errorf("instrument_repo.ListPage: %w", err)
+		}
+		instruments = append(instruments, instrument)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("instrument_repo.ListPage: %w", err)
+	}
+
+	nextPageToken := ""
+	if int32(len(instruments)) > pageSize {
+		last := instruments[pageSize-1]
+		nextPageToken = pagination.EncodeCursor(last.CreatedAt, last.ID)
+		instruments = instruments[:pageSize]
+	}
+
+	return instruments, nextPageToken, nil
+}
+
+func (r *pgxInstrumentRepository) UpdateRates(ctx context.Context, updates []ports.PriceUpdate, now time.Time) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(updates))
+	rates := make([]string, 0, len(updates))
+	for _, u := range updates {
+		id, err := uuid.Parse(u.InstrumentID)
+		if err != nil {
+			return fmt.Errorf("instrument_repo.UpdateRates: bad instrument id %q: %w", u.InstrumentID, err)
+		}
+		ids = append(ids, id)
+		rates = append(rates, u.Price)
+	}
+
+	query := `
+		UPDATE instruments AS i
+		SET current_rate = v.rate, updated_at = $3
+		FROM unnest($1::uuid[], $2::numeric[]) AS v(id, rate)
+		WHERE i.id = v.id
+	`
+
+	if _, err := r.pool.Exec(ctx, query, ids, rates, now); err != nil {
+		return fmt.Errorf("instrument_repo.UpdateRates: %w", err)
+	}
+
+	return nil
 }
 
 func (r *pgxInstrumentRepository) UpdateRate(ctx context.Context, id, rate string, now time.Time) (*domain.Instrument, error) {

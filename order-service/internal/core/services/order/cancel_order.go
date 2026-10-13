@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"order-service/internal/core/domain"
 	"order-service/internal/core/ports"
@@ -28,12 +30,17 @@ func (uc *CancelOrderCase) Execute(ctx context.Context, callerUserID, orderID st
 		return nil, err
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(attribute.String("order.id", parsedOrderID.String()))
+
 	o, err := uc.repo.GetByID(ctx, parsedOrderID)
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(attribute.String("order.status_before", string(o.Status)))
 
 	if o.UserID != parsedCallerID {
+		span.AddEvent("order.access_denied")
 		return nil, domain.ErrNotOrderOwner
 	}
 

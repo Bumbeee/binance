@@ -2,8 +2,10 @@ package profile
 
 import (
 	"context"
+	"market/shared/tracing"
 	"time"
 
+	"userservice/internal/core/domain"
 	"userservice/internal/core/ports"
 )
 
@@ -22,15 +24,20 @@ type GetUserProfileResult struct {
 	CreatedAt time.Time
 }
 
-func (uc *GetUserProfileCase) Execute(ctx context.Context, targetUserID string) (GetUserProfileResult, error) {
+func (uc *GetUserProfileCase) Execute(ctx context.Context, targetUserID string) (res *GetUserProfileResult, err error) {
+	ctx, span := tracing.Start(ctx, "profile.GetProfile")
+	defer span.End(&err, domain.ErrUserNotFound)
+
 	u, err := uc.repo.FindByID(ctx, targetUserID)
 	if err != nil {
-		return GetUserProfileResult{}, err
+		return nil, err
 	}
-	return GetUserProfileResult{
+
+	res = &GetUserProfileResult{
 		UserID:    u.ID.String(),
 		Email:     u.Email,
 		Role:      string(u.Role),
 		CreatedAt: u.CreatedAt,
-	}, nil
+	}
+	return res, nil
 }

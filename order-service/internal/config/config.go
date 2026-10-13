@@ -30,6 +30,10 @@ type Config struct { // TODO: check uber.go/fx - если делать, то т�
 
 	OTLPEndpoint       string
 	TraceSamplingRatio float64
+
+	MetricsAddr string
+
+	KafkaBrokers []string
 }
 
 func Load() *Config {
@@ -59,5 +63,9 @@ func Load() *Config {
 
 		OTLPEndpoint:       getOTLPEndpoint(),
 		TraceSamplingRatio: getTraceSamplingRatio(),
+
+		MetricsAddr: getMetricsAddr(),
+
+		KafkaBrokers: getKafkaBrokers(),
 	}
 }

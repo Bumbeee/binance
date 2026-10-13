@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -39,6 +40,19 @@ func NewRedisClient(ctx context.Context, log *zap.Logger, cfg RedisConfig) (*red
 	if err := client.Ping(ctx).Err(); err != nil {
 		client.Close()
 		return nil, fmt.Errorf("redis.Ping: %w", err)
+	}
+
+	if err := redisotel.InstrumentMetrics(client); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("redis.InstrumentMetrics: %w", err)
+	}
+
+	if err := redisotel.InstrumentTracing(
+		client,
+		redisotel.WithDBStatement(false),
+	); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("redis.InstrumentTracing: %w", err)
 	}
 
 	log.Info("connected to redis",

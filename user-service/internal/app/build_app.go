@@ -18,6 +18,7 @@ import (
 	"market/shared/infra/logger"
 	"market/shared/infra/pool"
 	"market/shared/infra/redis"
+	"market/shared/metrics"
 	"market/shared/tracing"
 
 	grpcadapter "userservice/internal/adapters/inbound/grpc"
@@ -57,6 +58,21 @@ func BuildApp() {
 	defer func() {
 		if err := shutdownTracing(ctx); err != nil {
 			log.Error("failed to shut down tracing", zap.Error(err))
+		}
+	}()
+
+	shutdownMetrics, err := metrics.Init(ctx, log, metrics.Config{
+		ServiceName: serviceName,
+		Addr:        cfg.MetricsAddr,
+	})
+	if err != nil {
+		log.Fatal("failed to init metrics", zap.Error(err))
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownMetrics(sctx); err != nil {
+			log.Warn("metrics shutdown", zap.Error(err))
 		}
 	}()
 

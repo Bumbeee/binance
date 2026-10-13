@@ -64,8 +64,39 @@ services:
       - ./tempo.yaml:/etc/tempo.yaml
       - tempo_data:/var/tempo
     ports:
-      - '4317:4317' # OTLP gRPC receiver
-      - '3200:3200' # Tempo query API
+      - '4317:4317'
+      - '3200:3200'
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command: ['--config.file=/etc/prometheus/prometheus.yml']
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - '9090:9090'
+    depends_on:
+      - user-service
+      - spot-instrument-service
+      - order-service
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ['-config.file=/etc/loki/config.yaml']
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - '3100:3100'
+
+  alloy:
+    image: grafana/alloy:latest
+    command:
+      ['run', '--storage.path=/var/lib/alloy/data', '/etc/alloy/config.alloy']
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:latest
@@ -76,8 +107,53 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
     volumes:
       - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - tempo
+      - prometheus
+      - loki
+
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    ports:
+      - '9094:9094'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1',
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+      --create --if-not-exists --topic trades.executed
+      --partitions 3 --replication-factor 1
+      --config retention.ms=604800000
+    restart: 'no'
 
   user-service:
     build:
@@ -109,8 +185,8 @@ services:
       PG_DSN: postgres://postgres:postgres@postgres-spot:5432/spotinstrumentservice?sslmode=disable
       GRPC_ADDR: ':50052'
       USER_SERVICE_ADDR: 'user-service:50051'
-      ORDER_SERVICE_ADDR: 'order-service:50053'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'tempo:4317'
+      KAFKA_BROKERS: 'kafka:9092'
     ports:
       - '50052:50052'
     depends_on:
@@ -118,10 +194,10 @@ services:
         condition: service_healthy
       user-service:
         condition: service_started
-      order-service:
-        condition: service_started
       tempo:
         condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
 
   order-service:
     build:
@@ -132,6 +208,7 @@ services:
       GRPC_ADDR: ':50053'
       USER_SERVICE_ADDR: 'user-service:50051'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'tempo:4317'
+      KAFKA_BROKERS: 'kafka:9092'
     ports:
       - '50053:50053'
     depends_on:
@@ -141,9 +218,13 @@ services:
         condition: service_started
       tempo:
         condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata_user:
   pgdata_spot:
   pgdata_order:
   tempo_data:
+  loki_data:
+  kafka_data:

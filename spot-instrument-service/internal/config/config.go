@@ -26,12 +26,13 @@ type Config struct {
 
 	ShutdownTimeout time.Duration
 
-	OrderServiceAddr    string
-	OrderServiceTimeout time.Duration
-	RatePollInterval    time.Duration
-
 	OTLPEndpoint       string
 	TraceSamplingRatio float64
+
+	MetricsAddr string
+
+	KafkaBrokers []string
+	KafkaGroupID string
 }
 
 func Load() *Config {
@@ -57,11 +58,12 @@ func Load() *Config {
 
 		ShutdownTimeout: getShutdownTimeout(),
 
-		OrderServiceAddr:    getOrderServiceAddr(),
-		OrderServiceTimeout: getOrderServiceTimeout(),
-		RatePollInterval:    getRatePollInterval(),
-
 		OTLPEndpoint:       getOTLPEndpoint(),
 		TraceSamplingRatio: getTraceSamplingRatio(),
+
+		MetricsAddr: getMetricsAddr(),
+
+		KafkaBrokers: getKafkaBrokers(),
+		KafkaGroupID: getKafkaGroupID(),
 	}
 }

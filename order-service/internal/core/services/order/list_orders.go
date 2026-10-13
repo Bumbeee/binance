@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"order-service/internal/core/domain"
 	"order-service/internal/core/ports"
@@ -38,6 +40,16 @@ func (uc *ListOrdersCase) Execute(
 	if err != nil {
 		return nil, err
 	}
+
+	attrs := []attribute.KeyValue{
+		attribute.Int("list.page_size", int(pageSize)),
+		attribute.Int("list.returned", len(orders)),
+		attribute.Bool("list.has_next", nextPageToken != ""),
+	}
+	if statusFilter != nil {
+		attrs = append(attrs, attribute.String("order.status_filter", string(*statusFilter)))
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attrs...)
 
 	results := make([]*OrderResult, 0, len(orders))
 	for _, o := range orders {

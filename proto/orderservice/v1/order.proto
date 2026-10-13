@@ -142,13 +142,35 @@ message Order {
 // price is always the resting (maker) order's price, not the incoming
 // (taker) order's — standard exchange convention.
 message Trade {
-  string id = 1;
-  string instrument_id = 2;
-  string buy_order_id = 3;
-  string sell_order_id = 4;
-  string price = 5;
-  string quantity = 6;
-  google.protobuf.Timestamp created_at = 7;
+  option (buf.validate.message).cel = {
+    id: "trade.distinct_orders"
+    message: "buy_order_id and sell_order_id must differ"
+    expression: "this.buy_order_id != this.sell_order_id"
+  };
+
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string instrument_id = 2 [(buf.validate.field).string.uuid = true];
+  string buy_order_id = 3 [(buf.validate.field).string.uuid = true];
+  string sell_order_id = 4 [(buf.validate.field).string.uuid = true];
+  string price = 5 [
+    (buf.validate.field).string.max_len = 40,
+    (buf.validate.field).string.pattern = "^[0-9]{1,20}(\\.[0-9]{1,18})?$",
+    (buf.validate.field).cel = {
+      id: "trade.price_positive"
+      message: "price must be greater than zero"
+      expression: "!this.matches('^[0.]*$')"
+    }
+  ];
+  string quantity = 6 [
+    (buf.validate.field).string.max_len = 40,
+    (buf.validate.field).string.pattern = "^[0-9]{1,20}(\\.[0-9]{1,18})?$",
+    (buf.validate.field).cel = {
+      id: "trade.quantity_positive"
+      message: "quantity must be greater than zero"
+      expression: "!this.matches('^[0.]*$')"
+    }
+  ];
+  google.protobuf.Timestamp created_at = 7 [(buf.validate.field).required = true];
 }
 
 message GetLastTradePricesRequest {

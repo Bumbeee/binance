@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+// Package events.v1 defines asynchronous events published to Kafka.
+package events.v1;
+
+option go_package = "events/v1;eventsv1";
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// TradeExecuted is an immutable fact: a trade happened at this price.
+// Published to topic "trades.executed", keyed by instrument_id so that all
+// trades of one instrument land in one partition and keep their order.
+message TradeExecuted {
+  string trade_id = 1 [(buf.validate.field).string.uuid = true];
+  string instrument_id = 2 [(buf.validate.field).string.uuid = true];
+  // price is the execution price: a positive decimal string.
+  string price = 3 [
+    (buf.validate.field).string.max_len = 40,
+    (buf.validate.field).string.pattern = "^[0-9]{1,20}(\\.[0-9]{1,18})?$",
+    (buf.validate.field).cel = {
+      id: "trade.price_positive"
+      message: "price must be greater than zero"
+      expression: "!this.matches('^[0.]*$')"
+    }
+  ];
+  string quantity = 4 [
+    (buf.validate.field).string.max_len = 40,
+    (buf.validate.field).string.pattern = "^[0-9]{1,20}(\\.[0-9]{1,18})?$"
+  ];
+  google.protobuf.Timestamp executed_at = 5 [(buf.validate.field).required = true];
+}

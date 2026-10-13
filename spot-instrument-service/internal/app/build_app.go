@@ -15,18 +15,20 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	spotv1 "market/proto/spotinstrumentservice/v1"
+	"market/shared/events"
+	"market/shared/infra/kafka"
 	"market/shared/infra/logger"
 	"market/shared/infra/pool"
+	"market/shared/metrics"
 	"market/shared/tracing"
 
 	grpcadapter "spot-instrument-service/internal/adapters/inbound/grpc"
 	"spot-instrument-service/internal/adapters/inbound/grpc/interceptor"
-	"spot-instrument-service/internal/adapters/outbound/orderclient"
+	kafkaadapter "spot-instrument-service/internal/adapters/inbound/kafka"
 	"spot-instrument-service/internal/adapters/outbound/postgres"
 	"spot-instrument-service/internal/adapters/outbound/userclient"
 	"spot-instrument-service/internal/config"
 	"spot-instrument-service/internal/core/services/instrument"
-	"spot-instrument-service/internal/worker"
 )
 
 const serviceName = "spot-instrument-service"
@@ -57,6 +59,21 @@ func BuildApp() {
 		}
 	}()
 
+	shutdownMetrics, err := metrics.Init(ctx, log, metrics.Config{
+		ServiceName: serviceName,
+		Addr:        cfg.MetricsAddr,
+	})
+	if err != nil {
+		log.Fatal("failed to init metrics", zap.Error(err))
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownMetrics(sctx); err != nil {
+			log.Warn("metrics shutdown", zap.Error(err))
+		}
+	}()
+
 	dbpool, err := pool.NewPool(ctx, log, cfg.PGDSN, cfg.PGMinConns, cfg.PGMaxConns, cfg.PGConnMaxIdleTime, cfg.PGConnMaxLifetime)
 	if err != nil {
 		log.Fatal("failed to connect to postgres", zap.Error(err))
@@ -67,22 +84,32 @@ func BuildApp() {
 		log.Fatal("failed to connect to user-service", zap.Error(err))
 	}
 
-	orderClient, err := orderclient.New(cfg.OrderServiceAddr, cfg.OrderServiceTimeout)
+	repo := postgres.NewInstrumentRepository(dbpool)
+
+	applyPricesCase := instrument.NewApplyTradePricesCase(repo)
+
+	consumer, err := kafka.NewConsumer(
+		kafka.Config{Brokers: cfg.KafkaBrokers, ClientID: serviceName},
+		cfg.KafkaGroupID,
+		[]string{events.TopicTradesExecuted},
+		log,
+	)
 	if err != nil {
-		log.Fatal("failed to connect to order-service", zap.Error(err))
+		log.Fatal("failed to create kafka consumer", zap.Error(err))
 	}
 
-	repo := postgres.NewInstrumentRepository(dbpool)
+	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
+	consumerDone := make(chan struct{})
+	go func() {
+		defer close(consumerDone)
+		consumer.RunBatch(consumerCtx, kafkaadapter.NewTradeBatchHandler(applyPricesCase))
+	}()
 
 	createInstrumentCase := instrument.NewCreateInstrumentCase(repo)
 	getInstrumentCase := instrument.NewGetInstrumentCase(repo)
 	listInstrumentsCase := instrument.NewListInstrumentsCase(repo)
 	archiveInstrumentCase := instrument.NewArchiveInstrumentCase(repo)
 	updateRateCase := instrument.NewUpdateRateCase(repo)
-
-	ratePoller := worker.NewRatePoller(orderClient, repo, log)
-	pollerCtx, cancelPoller := context.WithCancel(context.Background())
-	go ratePoller.Run(pollerCtx, cfg.RatePollInterval)
 
 	loggingInterceptor := interceptor.NewLoggingInterceptor(log)
 	authInterceptor := interceptor.NewAuthInterceptor(userClient)
@@ -149,7 +176,9 @@ func BuildApp() {
 		grpcServer.Stop()
 	}
 
-	cancelPoller()
+	cancelConsumer()
+	<-consumerDone
+	consumer.Close()
 
 	dbpool.Close()
 	log.Info("postgres pool closed")
@@ -158,12 +187,6 @@ func BuildApp() {
 		log.Error("failed to close user-service client", zap.Error(err))
 	} else {
 		log.Info("user-service client closed")
-	}
-
-	if err := orderClient.Close(); err != nil {
-		log.Error("failed to close order-service client", zap.Error(err))
-	} else {
-		log.Info("order-service client closed")
 	}
 
 	log.Info("shutdown complete")

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"market/shared/infra/kafka"
 	"market/shared/infra/logger"
 )
 
@@ -129,18 +130,6 @@ func getShutdownTimeout() time.Duration {
 	return getEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
 }
 
-func getOrderServiceAddr() string {
-	return mustGetEnv("ORDER_SERVICE_ADDR")
-}
-
-func getOrderServiceTimeout() time.Duration {
-	return getEnvDuration("ORDER_SERVICE_TIMEOUT", 5*time.Second)
-}
-
-func getRatePollInterval() time.Duration {
-	return getEnvDuration("RATE_POLL_INTERVAL", 2*time.Second)
-}
-
 func getOTLPEndpoint() string {
 	return getEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "tempo:4317")
 }
@@ -152,4 +141,16 @@ func getTraceSamplingRatio() float64 {
 		return 1.0
 	}
 	return ratio
+}
+
+func getMetricsAddr() string {
+	return getEnvString("METRICS_ADDR", ":9092")
+}
+
+func getKafkaGroupID() string {
+	return getEnvString("KAFKA_GROUP_ID", "spot-instrument-service")
+}
+
+func getKafkaBrokers() []string {
+	return kafka.ParseBrokers(getEnvString("KAFKA_BROKERS", "localhost:9094"))
 }

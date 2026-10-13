@@ -70,7 +70,7 @@ func toGetProfileResponse(r *profile.GetProfileResult) *user.GetProfileResponse 
 	}
 }
 
-func toGetUserProfileResponse(r profile.GetUserProfileResult) *user.GetUserProfileResponse {
+func toGetUserProfileResponse(r *profile.GetUserProfileResult) *user.GetUserProfileResponse {
 	return &user.GetUserProfileResponse{
 		UserId:    r.UserID,
 		Email:     r.Email,

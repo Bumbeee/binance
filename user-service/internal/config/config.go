@@ -45,6 +45,8 @@ type Config struct {
 
 	OTLPEndpoint       string
 	TraceSamplingRatio float64
+
+	MetricsAddr string
 }
 
 func Load() *Config {
@@ -86,5 +88,7 @@ func Load() *Config {
 
 		OTLPEndpoint:       getOTLPEndpoint(),
 		TraceSamplingRatio: getTraceSamplingRatio(),
+
+		MetricsAddr: getMetricsAddr(),
 	}
 }

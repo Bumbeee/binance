@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"market/shared/infra/kafka"
 	"market/shared/infra/logger"
 )
 
@@ -144,4 +145,12 @@ func getTraceSamplingRatio() float64 {
 		return 1.0
 	}
 	return ratio
+}
+
+func getMetricsAddr() string {
+	return getEnvString("METRICS_ADDR", ":9093")
+}
+
+func getKafkaBrokers() []string {
+	return kafka.ParseBrokers(getEnvString("KAFKA_BROKERS", "localhost:9094"))
 }

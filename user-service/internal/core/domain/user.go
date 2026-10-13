@@ -2,6 +2,7 @@ package domain
 
 import (
 	"market/shared/validator"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,5 +38,5 @@ func NewUser(rawEmail, passwordHash, firstName, lastName string) (*User, error) 
 }
 
 func ValidateName(name string) bool {
-	return name != ""
+	return strings.TrimSpace(name) != ""
 }

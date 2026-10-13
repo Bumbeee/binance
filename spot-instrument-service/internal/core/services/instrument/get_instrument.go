@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"spot-instrument-service/internal/core/ports"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type GetInstrumentCase struct {
@@ -19,5 +22,11 @@ func (uc *GetInstrumentCase) Execute(ctx context.Context, id string) (*Instrumen
 	if err != nil {
 		return nil, err
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String("instrument.id", inst.ID.String()),
+		attribute.String("instrument.symbol", inst.Symbol),
+	)
+
 	return toResult(inst), nil
 }

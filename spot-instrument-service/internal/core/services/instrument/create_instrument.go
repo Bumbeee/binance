@@ -5,6 +5,9 @@ import (
 
 	"spot-instrument-service/internal/core/domain"
 	"spot-instrument-service/internal/core/ports"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type CreateInstrumentCase struct {
@@ -20,11 +23,17 @@ func (uc *CreateInstrumentCase) Execute(
 	symbol, baseAsset, quoteAsset string,
 	pricePrecision, quantityPrecision int32,
 	minOrderSize string,
-) (*InstrumentResult, error) {
+) (res *InstrumentResult, err error) {
+
 	inst, err := domain.NewInstrument(symbol, baseAsset, quoteAsset, pricePrecision, quantityPrecision, minOrderSize)
 	if err != nil {
 		return nil, err
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String("instrument.id", inst.ID.String()),
+		attribute.String("instrument.symbol", inst.Symbol),
+	)
 
 	if err := uc.repo.Save(ctx, inst); err != nil {
 		return nil, err

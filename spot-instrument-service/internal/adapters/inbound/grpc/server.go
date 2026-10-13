@@ -57,14 +57,18 @@ func (s *Server) GetInstrument(ctx context.Context, req *spot.GetInstrumentReque
 func (s *Server) ListInstruments(ctx context.Context, req *spot.ListInstrumentsRequest) (*spot.ListInstrumentsResponse, error) {
 	var statusFilter *domain.InstrumentStatus
 	if req.StatusFilter != nil {
-		s := fromProtoStatus(*req.StatusFilter)
-		statusFilter = &s
 	}
 
-	res, err := s.listInstruments.Execute(ctx, statusFilter)
+	res, err := s.listInstruments.Execute(ctx, statusFilter, req.PageSize, req.PageToken)
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
+
+	instruments := make([]*spot.Instrument, 0, len(res.Instruments))
+	for _, r := range res.Instruments {
+		instruments = append(instruments, toProtoInstrument(r))
+	}
+
 	return toListInstrumentsResponse(res), nil
 }
 

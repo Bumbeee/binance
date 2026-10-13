@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: user-service
+    static_configs:
+      - targets: ['user-service:9091']
+
+  - job_name: spot-instrument-service
+    static_configs:
+      - targets: ['spot-instrument-service:9092']
+
+  - job_name: order-service
+    static_configs:
+      - targets: ['order-service:9093']

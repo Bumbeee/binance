@@ -3,9 +3,12 @@ package token
 import (
 	"context"
 	"errors"
+	"market/shared/tracing"
 	"time"
 
 	"userservice/internal/core/ports"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type RefreshTokenCase struct {
@@ -35,7 +38,10 @@ type RefreshTokenResult struct {
 	ExpiresAt    time.Time
 }
 
-func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) (*RefreshTokenResult, error) {
+func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) (res *RefreshTokenResult, err error) {
+	ctx, span := tracing.Start(ctx, "token.Refresh")
+	defer span.End(&err, ErrInvalidRefreshToken)
+
 	userID, err := r.store.GetAndDelete(ctx, oldRefreshToken)
 	if err != nil {
 		if errors.Is(err, ports.ErrKeyNotFound) {
@@ -43,6 +49,7 @@ func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) 
 		}
 		return nil, err
 	}
+	span.SetAttributes(attribute.String("user.id", userID))
 
 	user, err := r.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -63,9 +70,11 @@ func (r *RefreshTokenCase) Execute(ctx context.Context, oldRefreshToken string) 
 		return nil, err
 	}
 
-	return &RefreshTokenResult{
+	res = &RefreshTokenResult{
 		AccessToken:  newAccessToken,
 		RefreshToken: newRefreshToken,
 		ExpiresAt:    expiresAt,
-	}, nil
+	}
+
+	return res, nil
 }

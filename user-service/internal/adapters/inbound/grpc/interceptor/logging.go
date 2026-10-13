@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"market/shared/infra/logger"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,32 +25,33 @@ func (l *LoggingInterceptor) Unary() grpc.UnaryServerInterceptor {
 
 		resp, err := handler(ctx, req)
 
-		duration := time.Since(start)
+		log := logger.WithTrace(ctx, l.log)
 
+		duration := time.Since(start)
 		fields := []zap.Field{
 			zap.String("method", info.FullMethod),
 			zap.Int64("duration_ms", duration.Milliseconds()),
 		}
 
 		if err == nil {
-			l.log.Info("grpc request completed", append(fields, zap.String("code", codes.OK.String()))...)
+			log.Info("grpc request completed", append(fields, zap.String("code", codes.OK.String()))...)
 			return resp, err
 		}
 
-		stat, ok := status.FromError(err)
+		st, ok := status.FromError(err)
 		code := codes.Unknown
 		if ok {
-			code = stat.Code()
+			code = st.Code()
 		}
-		fields = append(fields, zap.String("code", code.String()), zap.String("error", stat.Message()))
+		fields = append(fields, zap.String("code", code.String()), zap.String("error", st.Message()))
 
 		switch code {
 		case codes.Internal, codes.Unknown, codes.DataLoss, codes.Unavailable:
-			l.log.Error("grpc request failed", fields...)
+			log.Error("grpc request failed", fields...)
 		case codes.Unauthenticated, codes.PermissionDenied, codes.InvalidArgument, codes.NotFound, codes.AlreadyExists:
-			l.log.Warn("grpc request rejected", fields...)
+			log.Warn("grpc request rejected", fields...)
 		default:
-			l.log.Info("grpc request completed with error", fields...)
+			log.Info("grpc request completed with error", fields...)
 		}
 
 		return resp, err

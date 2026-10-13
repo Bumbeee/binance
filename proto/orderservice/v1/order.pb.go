@@ -1216,17 +1216,20 @@ const file_orderservice_v1_order_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12-\n" +
-	"\x12remaining_quantity\x18\v \x01(\tR\x11remainingQuantity\"\xef\x01\n" +
-	"\x05Trade\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
-	"\rinstrument_id\x18\x02 \x01(\tR\finstrumentId\x12 \n" +
-	"\fbuy_order_id\x18\x03 \x01(\tR\n" +
-	"buyOrderId\x12\"\n" +
-	"\rsell_order_id\x18\x04 \x01(\tR\vsellOrderId\x12\x14\n" +
-	"\x05price\x18\x05 \x01(\tR\x05price\x12\x1a\n" +
-	"\bquantity\x18\x06 \x01(\tR\bquantity\x129\n" +
+	"\x12remaining_quantity\x18\v \x01(\tR\x11remainingQuantity\"\x93\x05\n" +
+	"\x05Trade\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12-\n" +
+	"\rinstrument_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\finstrumentId\x12*\n" +
+	"\fbuy_order_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"buyOrderId\x12,\n" +
+	"\rsell_order_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vsellOrderId\x12\x90\x01\n" +
+	"\x05price\x18\x05 \x01(\tBz\xbaHw\xba\x01Q\n" +
+	"\x14trade.price_positive\x12\x1fprice must be greater than zero\x1a\x18!this.matches('^[0.]*$')r!\x18(2\x1d^[0-9]{1,20}(\\.[0-9]{1,18})?$R\x05price\x12\x9d\x01\n" +
+	"\bquantity\x18\x06 \x01(\tB\x80\x01\xbaH}\xba\x01W\n" +
+	"\x17trade.quantity_positive\x12\"quantity must be greater than zero\x1a\x18!this.matches('^[0.]*$')r!\x18(2\x1d^[0-9]{1,20}(\\.[0-9]{1,18})?$R\bquantity\x12A\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"M\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt:q\xbaHn\x1al\n" +
+	"\x15trade.distinct_orders\x12*buy_order_id and sell_order_id must differ\x1a'this.buy_order_id != this.sell_order_id\"M\n" +
 	"\x19GetLastTradePricesRequest\x120\n" +
 	"\x0einstrument_ids\x18\x01 \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\rinstrumentIds\"\x84\x01\n" +
 	"\x0eLastTradePrice\x12#\n" +

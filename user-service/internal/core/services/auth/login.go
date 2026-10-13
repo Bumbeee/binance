@@ -2,10 +2,13 @@ package auth
 
 import (
 	"context"
+	"market/shared/tracing"
 	"market/shared/validator"
 	"time"
 	"userservice/internal/core/ports"
 	"userservice/internal/core/services/token"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type LoginCase struct {
@@ -24,7 +27,7 @@ func NewLoginCase(
 	refreshTokenStore ports.RefreshTokenStore,
 	refreshTTL time.Duration,
 ) (*LoginCase, error) {
-	dummyHash, err := hasher.Hash("dummy-password-never-used-for-timing-safety")
+	dummyHash, err := hasher.Hash(context.Background(), "dummy-password-never-used-for-timing-safety")
 	if err != nil {
 		return nil, err
 	}
@@ -46,18 +49,21 @@ type LoginResult struct {
 	ExpiresAt    time.Time
 }
 
-func (lc *LoginCase) Execute(ctx context.Context, email, plainPassword string) (*LoginResult, error) {
+func (lc *LoginCase) Execute(ctx context.Context, email, plainPassword string) (res *LoginResult, err error) {
+	ctx, span := tracing.Start(ctx, "auth.Login")
+	defer span.End(&err, ErrInvalidCredentials)
+
 	if !validator.IsValidEmail(email) || plainPassword == "" {
 		return nil, ErrInvalidCredentials
 	}
 
 	user, err := lc.repo.GetByEmail(ctx, email)
 	if err != nil {
-		_ = lc.hasher.Compare(lc.dummyHash, plainPassword)
+		_ = lc.hasher.Compare(ctx, lc.dummyHash, plainPassword)
 		return nil, ErrInvalidCredentials
 	}
 
-	if err := lc.hasher.Compare(user.PasswordHash, plainPassword); err != nil {
+	if err := lc.hasher.Compare(ctx, user.PasswordHash, plainPassword); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -75,10 +81,13 @@ func (lc *LoginCase) Execute(ctx context.Context, email, plainPassword string) (
 		return nil, err
 	}
 
-	return &LoginResult{
+	res = &LoginResult{
 		UserID:       user.ID.String(),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresAt:    expiresAt,
-	}, nil
+	}
+	span.SetAttributes(attribute.String("user.id", res.UserID))
+
+	return res, nil
 }

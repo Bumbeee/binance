@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -20,6 +21,8 @@ func NewPool(ctx context.Context, log *zap.Logger, dsn string, minConns, maxConn
 	cfg.MaxConnIdleTime = maxIdle
 	cfg.MaxConnLifetime = maxLifetime
 
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
+
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pool.CreatePool: %w", err)
@@ -28,6 +31,11 @@ func NewPool(ctx context.Context, log *zap.Logger, dsn string, minConns, maxConn
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("pool.PingDB: %w", err)
+	}
+
+	if err := otelpgx.RecordStats(pool); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("pgxpool.RecordStats: %w", err)
 	}
 
 	log.Info("connected to postgres",

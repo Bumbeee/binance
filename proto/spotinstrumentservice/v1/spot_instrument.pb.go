@@ -102,14 +102,18 @@ type Instrument struct {
 	// quote_asset is the asset used to price base_asset, e.g. "USDT".
 	QuoteAsset string `protobuf:"bytes,4,opt,name=quote_asset,json=quoteAsset,proto3" json:"quote_asset,omitempty"`
 	// price_precision is the number of decimal digits allowed in order prices
-	// for this instrument.
+	// for this instrument. At most 18, matching the decimal strings used
+	// across the contract.
 	PricePrecision int32 `protobuf:"varint,5,opt,name=price_precision,json=pricePrecision,proto3" json:"price_precision,omitempty"`
 	// quantity_precision is the number of decimal digits allowed in order
-	// quantities for this instrument.
+	// quantities for this instrument. At most 18.
 	QuantityPrecision int32 `protobuf:"varint,6,opt,name=quantity_precision,json=quantityPrecision,proto3" json:"quantity_precision,omitempty"`
-	// min_order_size is the minimum tradable quantity, as a decimal string.
+	// min_order_size is the minimum tradable quantity, as a positive decimal
+	// string.
 	MinOrderSize string `protobuf:"bytes,7,opt,name=min_order_size,json=minOrderSize,proto3" json:"min_order_size,omitempty"`
-	// current_rate is the latest known exchange rate, as a decimal string.
+	// current_rate is the latest known exchange rate, as a non-negative
+	// decimal string. "0" is valid: it is the initial value before the first
+	// rate update.
 	CurrentRate   string                 `protobuf:"bytes,8,opt,name=current_rate,json=currentRate,proto3" json:"current_rate,omitempty"`
 	Status        InstrumentStatus       `protobuf:"varint,9,opt,name=status,proto3,enum=spotinstrumentservice.v1.InstrumentStatus" json:"status,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -444,8 +448,12 @@ func (x *GetInstrumentResponse) GetInstrument() *Instrument {
 type ListInstrumentsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// status_filter restricts the result to instruments with this status.
-	// Unset returns instruments of all statuses.
-	StatusFilter  *InstrumentStatus `protobuf:"varint,1,opt,name=status_filter,json=statusFilter,proto3,enum=spotinstrumentservice.v1.InstrumentStatus,oneof" json:"status_filter,omitempty"`
+	// Unset returns instruments of all statuses. If set, it must be a
+	// defined, non-UNSPECIFIED status.
+	StatusFilter *InstrumentStatus `protobuf:"varint,1,opt,name=status_filter,json=statusFilter,proto3,enum=spotinstrumentservice.v1.InstrumentStatus,oneof" json:"status_filter,omitempty"`
+	PageSize     int32             `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token is opaque: pass back next_page_token from a previous response.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -487,9 +495,25 @@ func (x *ListInstrumentsRequest) GetStatusFilter() InstrumentStatus {
 	return InstrumentStatus_INSTRUMENT_STATUS_UNSPECIFIED
 }
 
+func (x *ListInstrumentsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListInstrumentsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListInstrumentsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instruments   []*Instrument          `protobuf:"bytes,1,rep,name=instruments,proto3" json:"instruments,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Instruments []*Instrument          `protobuf:"bytes,1,rep,name=instruments,proto3" json:"instruments,omitempty"`
+	// next_page_token is empty when there are no more results.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -529,6 +553,13 @@ func (x *ListInstrumentsResponse) GetInstruments() []*Instrument {
 		return x.Instruments
 	}
 	return nil
+}
+
+func (x *ListInstrumentsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type ArchiveInstrumentRequest struct {
@@ -720,25 +751,28 @@ var File_spotinstrumentservice_v1_spot_instrument_proto protoreflect.FileDescrip
 
 const file_spotinstrumentservice_v1_spot_instrument_proto_rawDesc = "" +
 	"\n" +
-	".spotinstrumentservice/v1/spot_instrument.proto\x12\x18spotinstrumentservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xcf\x03\n" +
+	".spotinstrumentservice/v1/spot_instrument.proto\x12\x18spotinstrumentservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\x96\a\n" +
 	"\n" +
-	"Instrument\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
-	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12\x1d\n" +
+	"Instrument\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12.\n" +
+	"\x06symbol\x18\x02 \x01(\tB\x16\xbaH\x13r\x11\x10\x01\x18\x102\v^[A-Z0-9]+$R\x06symbol\x126\n" +
 	"\n" +
-	"base_asset\x18\x03 \x01(\tR\tbaseAsset\x12\x1f\n" +
-	"\vquote_asset\x18\x04 \x01(\tR\n" +
-	"quoteAsset\x12'\n" +
-	"\x0fprice_precision\x18\x05 \x01(\x05R\x0epricePrecision\x12-\n" +
-	"\x12quantity_precision\x18\x06 \x01(\x05R\x11quantityPrecision\x12$\n" +
-	"\x0emin_order_size\x18\a \x01(\tR\fminOrderSize\x12!\n" +
-	"\fcurrent_rate\x18\b \x01(\tR\vcurrentRate\x12B\n" +
-	"\x06status\x18\t \x01(\x0e2*.spotinstrumentservice.v1.InstrumentStatusR\x06status\x129\n" +
+	"base_asset\x18\x03 \x01(\tB\x17\xbaH\x14r\x122\x10^[A-Z0-9]{1,16}$R\tbaseAsset\x128\n" +
+	"\vquote_asset\x18\x04 \x01(\tB\x17\xbaH\x14r\x122\x10^[A-Z0-9]{1,16}$R\n" +
+	"quoteAsset\x122\n" +
+	"\x0fprice_precision\x18\x05 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x12(\x00R\x0epricePrecision\x128\n" +
+	"\x12quantity_precision\x18\x06 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x12(\x00R\x11quantityPrecision\x12\xb9\x01\n" +
+	"\x0emin_order_size\x18\a \x01(\tB\x92\x01\xbaH\x8e\x01\xba\x01h\n" +
+	"\"instrument.min_order_size_positive\x12(min_order_size must be greater than zero\x1a\x18!this.matches('^[0.]*$')r!\x18(2\x1d^[0-9]{1,20}(\\.[0-9]{1,18})?$R\fminOrderSize\x12I\n" +
+	"\fcurrent_rate\x18\b \x01(\tB&\xbaH#r!\x18(2\x1d^[0-9]{1,20}(\\.[0-9]{1,18})?$R\vcurrentRate\x12N\n" +
+	"\x06status\x18\t \x01(\x0e2*.spotinstrumentservice.v1.InstrumentStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06status\x12A\n" +
 	"\n" +
 	"created_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\x12A\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa7\x02\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tupdatedAt:\x80\x01\xbaH}\x1a{\n" +
+	"%instrument.updated_not_before_created\x12.updated_at must not be earlier than created_at\x1a\"this.updated_at >= this.created_at\"\xa7\x02\n" +
 	"\x17CreateInstrumentRequest\x12!\n" +
 	"\x06symbol\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18\x10R\x06symbol\x12&\n" +
 	"\n" +
@@ -757,12 +791,17 @@ const file_spotinstrumentservice_v1_spot_instrument_proto_rawDesc = "" +
 	"\x15GetInstrumentResponse\x12D\n" +
 	"\n" +
 	"instrument\x18\x01 \x01(\v2$.spotinstrumentservice.v1.InstrumentR\n" +
-	"instrument\"\x80\x01\n" +
-	"\x16ListInstrumentsRequest\x12T\n" +
-	"\rstatus_filter\x18\x01 \x01(\x0e2*.spotinstrumentservice.v1.InstrumentStatusH\x00R\fstatusFilter\x88\x01\x01B\x10\n" +
-	"\x0e_status_filter\"a\n" +
+	"instrument\"\xdd\x01\n" +
+	"\x16ListInstrumentsRequest\x12`\n" +
+	"\rstatus_filter\x18\x01 \x01(\x0e2*.spotinstrumentservice.v1.InstrumentStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\fstatusFilter\x88\x01\x01\x12&\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageTokenB\x10\n" +
+	"\x0e_status_filter\"\x89\x01\n" +
 	"\x17ListInstrumentsResponse\x12F\n" +
-	"\vinstruments\x18\x01 \x03(\v2$.spotinstrumentservice.v1.InstrumentR\vinstruments\"4\n" +
+	"\vinstruments\x18\x01 \x03(\v2$.spotinstrumentservice.v1.InstrumentR\vinstruments\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"4\n" +
 	"\x18ArchiveInstrumentRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"a\n" +
 	"\x19ArchiveInstrumentResponse\x12D\n" +
