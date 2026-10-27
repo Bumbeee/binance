@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -88,22 +89,37 @@ func BuildApp() {
 
 	applyPricesCase := instrument.NewApplyTradePricesCase(repo)
 
-	consumer, err := kafka.NewConsumer(
-		kafka.Config{Brokers: cfg.KafkaBrokers, ClientID: serviceName},
-		cfg.KafkaGroupID,
-		[]string{events.TopicTradesExecuted},
-		log,
+	kcfg := kafka.Config{Brokers: cfg.KafkaBrokers, ClientID: serviceName}
+	handler := kafkaadapter.NewTradeBatchHandler(applyPricesCase)
+
+	mainConsumer, err := kafka.NewConsumer(kcfg, cfg.KafkaGroupID,
+		[]string{events.TopicTradesExecuted}, log,
+		kafka.WithDLQ(events.TopicTradesExecutedDLQ),
+		kafka.WithMaxAttempts(5),
 	)
 	if err != nil {
 		log.Fatal("failed to create kafka consumer", zap.Error(err))
 	}
 
-	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	consumerDone := make(chan struct{})
-	go func() {
-		defer close(consumerDone)
-		consumer.RunBatch(consumerCtx, kafkaadapter.NewTradeBatchHandler(applyPricesCase))
-	}()
+	dlqConsumer, err := kafka.NewConsumer(kcfg, cfg.KafkaGroupID+"-dlq",
+		[]string{events.TopicTradesExecutedDLQ}, log,
+		kafka.WithDLQ(events.TopicTradesExecutedDead),
+		kafka.WithMaxAttempts(3),
+		kafka.WithDelay(30*time.Second),
+	)
+	if err != nil {
+		log.Fatal("failed to create dlq consumer", zap.Error(err))
+	}
+
+	consumerCtx, cancelConsumers := context.WithCancel(context.Background())
+	var consumersWG sync.WaitGroup
+	for _, c := range []*kafka.Consumer{mainConsumer, dlqConsumer} {
+		consumersWG.Add(1)
+		go func() {
+			defer consumersWG.Done()
+			c.RunBatch(consumerCtx, handler)
+		}()
+	}
 
 	createInstrumentCase := instrument.NewCreateInstrumentCase(repo)
 	getInstrumentCase := instrument.NewGetInstrumentCase(repo)
@@ -176,9 +192,10 @@ func BuildApp() {
 		grpcServer.Stop()
 	}
 
-	cancelConsumer()
-	<-consumerDone
-	consumer.Close()
+	cancelConsumers()
+	consumersWG.Wait()
+	mainConsumer.Close()
+	dlqConsumer.Close()
 
 	dbpool.Close()
 	log.Info("postgres pool closed")

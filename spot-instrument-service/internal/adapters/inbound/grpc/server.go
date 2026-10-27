@@ -4,7 +4,6 @@ import (
 	"context"
 
 	spot "market/proto/spotinstrumentservice/v1"
-	"spot-instrument-service/internal/core/domain"
 	"spot-instrument-service/internal/core/services/instrument"
 )
 
@@ -55,20 +54,15 @@ func (s *Server) GetInstrument(ctx context.Context, req *spot.GetInstrumentReque
 }
 
 func (s *Server) ListInstruments(ctx context.Context, req *spot.ListInstrumentsRequest) (*spot.ListInstrumentsResponse, error) {
-	var statusFilter *domain.InstrumentStatus
-	if req.StatusFilter != nil {
+	statusFilter, err := toDomainStatusFilter(req.StatusFilter)
+	if err != nil {
+		return nil, err
 	}
 
-	res, err := s.listInstruments.Execute(ctx, statusFilter, req.PageSize, req.PageToken)
+	res, err := s.listInstruments.Execute(ctx, statusFilter, req.GetPageSize(), req.GetPageToken())
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
-
-	instruments := make([]*spot.Instrument, 0, len(res.Instruments))
-	for _, r := range res.Instruments {
-		instruments = append(instruments, toProtoInstrument(r))
-	}
-
 	return toListInstrumentsResponse(res), nil
 }
 

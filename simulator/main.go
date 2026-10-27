@@ -23,6 +23,8 @@ import (
 	userv1 "market/proto/userservice/v1"
 )
 
+//cd simulator &&  go run . -bots 20 -rps 100 -spread 0.06 -duration 2m
+
 const registerTimeout = 20 * time.Second
 
 type stats struct {

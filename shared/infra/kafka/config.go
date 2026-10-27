@@ -3,12 +3,11 @@ package kafka
 import (
 	"errors"
 	"strings"
+	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/twmb/franz-go/plugin/kotel"
+	"github.com/IBM/sarama"
 )
 
-// Config описывает подключение к кластеру Kafka.
 type Config struct {
 	Brokers  []string
 	ClientID string
@@ -21,7 +20,6 @@ func (c Config) validate() error {
 	return nil
 }
 
-// ParseBrokers разбирает строку вида "kafka:9092,kafka2:9092" (удобно для env).
 func ParseBrokers(s string) []string {
 	var out []string
 	for _, b := range strings.Split(s, ",") {
@@ -32,10 +30,10 @@ func ParseBrokers(s string) []string {
 	return out
 }
 
-// newTracing подключает OTel к клиенту: franz-go сам кладёт trace context в заголовки
-// сообщения при отправке и достаёт его при чтении.
-func newTracing() (*kotel.Tracer, kgo.Opt) {
-	tracer := kotel.NewTracer()
-	k := kotel.NewKotel(kotel.WithTracer(tracer))
-	return tracer, kgo.WithHooks(k.Hooks()...)
+func newSaramaConfig(cfg Config) *sarama.Config {
+	sc := sarama.NewConfig()
+	sc.Version = sarama.V3_6_0_0
+	sc.ClientID = cfg.ClientID
+	sc.Net.DialTimeout = 5 * time.Second
+	return sc
 }

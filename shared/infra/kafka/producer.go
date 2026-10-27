@@ -2,77 +2,120 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/IBM/sarama"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 )
 
-// Message — одно сообщение для пакетной отправки.
 type Message struct {
-	Topic string
-	Key   string
-	Value []byte
+	Topic   string
+	Key     string
+	Value   []byte
+	Headers map[string]string
 }
 
 type Producer struct {
-	cl *kgo.Client
+	sp     sarama.SyncProducer
+	tracer trace.Tracer
 }
 
 func NewProducer(ctx context.Context, cfg Config) (*Producer, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	_, tracing := newTracing()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
-	// По умолчанию franz-go использует acks=all и идемпотентный продюсер:
-	// повторная отправка при сетевой ошибке не создаёт дубликат в партиции.
-	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(cfg.Brokers...),
-		kgo.ClientID(cfg.ClientID),
-		tracing,
-	)
+	sc := newSaramaConfig(cfg)
+	sc.Producer.RequiredAcks = sarama.WaitForAll
+	sc.Producer.Return.Successes = true
+	sc.Producer.Return.Errors = true
+	sc.Producer.Idempotent = true
+	sc.Net.MaxOpenRequests = 1
+	sc.Producer.Partitioner = sarama.NewReferenceHashPartitioner
+
+	sp, err := sarama.NewSyncProducer(cfg.Brokers, sc)
 	if err != nil {
 		return nil, fmt.Errorf("kafka producer: %w", err)
 	}
-
-	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := cl.Ping(pingCtx); err != nil {
-		cl.Close()
-		return nil, fmt.Errorf("kafka producer ping: %w", err)
-	}
-	return &Producer{cl: cl}, nil
+	return &Producer{sp: sp, tracer: otel.Tracer("market/shared/kafka")}, nil
 }
 
-// Publish синхронно отправляет сообщение и ждёт подтверждения брокера.
-// ctx кладётся в запись, чтобы трейс продолжился у consumer-а.
-func (p *Producer) Publish(ctx context.Context, topic, key string, value []byte) error {
-	return p.PublishBatch(ctx, []Message{{Topic: topic, Key: key, Value: value}})
+func (p *Producer) Publish(ctx context.Context, m Message) error {
+	return p.PublishBatch(ctx, []Message{m})
 }
 
-// PublishBatch отправляет пачку сообщений одним вызовом и ждёт подтверждения всех.
-func (p *Producer) PublishBatch(ctx context.Context, msgs []Message) error {
-	if len(msgs) == 0 {
-		return nil
-	}
-	recs := make([]*kgo.Record, len(msgs))
-	for i, m := range msgs {
-		recs[i] = &kgo.Record{Context: ctx, Topic: m.Topic, Key: []byte(m.Key), Value: m.Value}
-	}
-	return p.cl.ProduceSync(ctx, recs...).FirstErr()
-}
-
-// PublishProto сериализует protobuf-сообщение и отправляет его.
 func (p *Producer) PublishProto(ctx context.Context, topic, key string, msg proto.Message) error {
 	b, err := proto.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal %T: %w", msg, err)
 	}
-	return p.Publish(ctx, topic, key, b)
+	return p.Publish(ctx, Message{Topic: topic, Key: key, Value: b})
 }
 
-func (p *Producer) Close() {
-	p.cl.Close()
+func (p *Producer) PublishBatch(ctx context.Context, msgs []Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	pms := make([]*sarama.ProducerMessage, len(msgs))
+	spans := make([]trace.Span, len(msgs))
+	for i, m := range msgs {
+		sctx, span := p.tracer.Start(ctx, m.Topic+" publish",
+			trace.WithSpanKind(trace.SpanKindProducer),
+			trace.WithAttributes(
+				attribute.String("messaging.system", "kafka"),
+				attribute.String("messaging.destination.name", m.Topic),
+				attribute.String("messaging.kafka.message.key", m.Key),
+			))
+		spans[i] = span
+
+		hdrs := injectHeaders(sctx)
+		for k, v := range m.Headers {
+			hdrs = append(hdrs, sarama.RecordHeader{Key: []byte(k), Value: []byte(v)})
+		}
+		pm := &sarama.ProducerMessage{
+			Topic:   m.Topic,
+			Value:   sarama.ByteEncoder(m.Value),
+			Headers: hdrs,
+		}
+
+		if m.Key != "" {
+			pm.Key = sarama.StringEncoder(m.Key)
+		}
+		pms[i] = pm
+	}
+
+	err := p.sp.SendMessages(pms)
+
+	failed := map[*sarama.ProducerMessage]error{}
+	var perrs sarama.ProducerErrors
+	if errors.As(err, &perrs) {
+		for _, pe := range perrs {
+			failed[pe.Msg] = pe.Err
+		}
+	}
+	for i, span := range spans {
+		if e, bad := failed[pms[i]]; bad {
+			span.RecordError(e)
+			span.SetStatus(codes.Error, e.Error())
+		} else if err != nil && len(failed) == 0 {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}
+	return err
 }
+
+func (p *Producer) Close() error { return p.sp.Close() }

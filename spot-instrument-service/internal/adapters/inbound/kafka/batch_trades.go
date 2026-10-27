@@ -3,17 +3,17 @@ package kafka
 import (
 	"context"
 	"fmt"
+
 	eventsv1 "market/proto/events/v1"
 	"market/shared/infra/kafka"
 	"spot-instrument-service/internal/core/ports"
 	"spot-instrument-service/internal/core/services/instrument"
 
-	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/protobuf/proto"
 )
 
 func NewTradeBatchHandler(uc *instrument.ApplyTradePricesCase) kafka.BatchHandler {
-	return func(ctx context.Context, recs []*kgo.Record) error {
+	return func(ctx context.Context, recs []*kafka.Record) error {
 		latest := make(map[string]ports.PriceUpdate, len(recs))
 		for _, r := range recs {
 			var ev eventsv1.TradeExecuted
@@ -34,6 +34,6 @@ func NewTradeBatchHandler(uc *instrument.ApplyTradePricesCase) kafka.BatchHandle
 		for _, u := range latest {
 			updates = append(updates, u)
 		}
-		return uc.Execute(ctx, updates) // см. примечание
+		return uc.Execute(ctx, updates)
 	}
 }

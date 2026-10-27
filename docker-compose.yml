@@ -143,16 +143,27 @@ services:
       timeout: 10s
       retries: 10
 
-  kafka-init:
+    kafka-init:
     image: apache/kafka:3.9.0
     depends_on:
       kafka:
         condition: service_healthy
-    command: >
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
-      --create --if-not-exists --topic trades.executed
-      --partitions 3 --replication-factor 1
-      --config retention.ms=604800000
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+          --create --if-not-exists --topic trades.executed \
+          --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+          --create --if-not-exists --topic trades.executed.dlq \
+          --partitions 1 --replication-factor 1 \
+          --config retention.ms=1209600000
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+          --create --if-not-exists --topic trades.executed.dead \
+          --partitions 1 --replication-factor 1 \
+          --config retention.ms=2592000000
     restart: 'no'
 
   user-service:

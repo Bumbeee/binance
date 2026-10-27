@@ -1,3 +1,7 @@
 package events
 
-const TopicTradesExecuted = "trades.executed"
+const (
+	TopicTradesExecuted     = "trades.executed"
+	TopicTradesExecutedDLQ  = "trades.executed.dlq"
+	TopicTradesExecutedDead = "trades.executed.dead"
+)

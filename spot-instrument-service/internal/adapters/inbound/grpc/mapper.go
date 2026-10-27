@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	spot "market/proto/spotinstrumentservice/v1"
@@ -68,6 +70,22 @@ func toListInstrumentsResponse(r *instrument.ListInstrumentsResult) *spot.ListIn
 		Instruments:   instruments,
 		NextPageToken: r.NextPageToken,
 	}
+}
+
+func toDomainStatusFilter(f *spot.InstrumentStatus) (*domain.InstrumentStatus, error) {
+	if f == nil || *f == spot.InstrumentStatus_INSTRUMENT_STATUS_UNSPECIFIED {
+		return nil, nil
+	}
+	var st domain.InstrumentStatus
+	switch *f {
+	case spot.InstrumentStatus_INSTRUMENT_STATUS_ACTIVE:
+		st = domain.InstrumentStatusActive
+	case spot.InstrumentStatus_INSTRUMENT_STATUS_DELISTED:
+		st = domain.InstrumentStatusDelisted
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "unknown status filter: %v", *f)
+	}
+	return &st, nil
 }
 
 func toArchiveInstrumentResponse(r *instrument.InstrumentResult) *spot.ArchiveInstrumentResponse {
